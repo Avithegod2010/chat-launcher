@@ -1,8 +1,9 @@
-# Security Audit & Bug Hunt — Chat Launcher v1.0.x
+# Security Audit & Bug Hunt — Chat Launcher v1.0–v1.2
 
-*Audit date: 2026-10-25 · Scope: entire repository (web app, service worker,
-Expo shell, tooling, release pipeline) · Method: manual source-to-sink review
-plus automated adversarial probes (`tools/bug-hunt.mjs`, 9/9 passing).*
+*Audit dates: 2026-10-25 (v1.0) · 2026-10-26 (v1.1, v1.2) · Scope: entire
+repository (web app, service worker, Expo shell, tooling, CI/CD, release
+pipeline) · Method: manual source-to-sink review plus automated adversarial
+probes (`tools/bug-hunt.mjs`, 9/9 passing) and unit tests (55/55).*
 
 Every answer below is backed by evidence (file + probe), not assumptions.
 
@@ -115,6 +116,47 @@ as static files, no CDN, no analytics. `puppeteer-core` is a devDependency used
 only by the screenshot/bug-hunt tooling and is never part of the site. The Expo
 shell declares `expo`, `react-native`, `react-native-webview` (audited via
 `npm audit` on install; no critical advisories at build time).
+
+### v1.2 addition — the vendored QR library
+
+`js/vendor/qrcode-generator.js` is the only third-party code running in the
+page: the well-known `qrcode-generator` package (Kazuhiko Arase, MIT, fetched
+unmodified from npm/jsDelivr at a pinned version). Review findings:
+
+- **Pure computation, no network, no eval, no DOM writes.** Its only inputs
+  are the string passed by `js/qr.js` (always our own share URL — never user
+  text) and the error-correction level.
+- Loaded as a classic local script; CSP `script-src 'self'` covers it. Probes
+  confirm zero CSP violations with the vendor script active.
+- The QR payload is `window.location`-derived, so a hostile `?number=` cannot
+  smuggle an arbitrary URL into someone else's phone scan — the worst case is
+  a QR containing the attacker's own number parameter, which only opens the
+  launcher pre-filled (same as sending the link).
+
+### v1.2 additions — new modules
+
+`js/i18n.js` (string tables + `t()` interpolation via replaceAll — no HTML
+generation), `js/stats.js` (aggregate counters with junk-key stripping and
+corrupt-JSON degradation — unit-tested), and the bulk-launch parser reuse the
+same hardened patterns: textContent rendering, clamped lengths, digit-only
+normalization. The adversarial probe suite still passes 9/9 against the full
+v1.2 UI.
+
+---
+
+## CI/CD pipeline security
+
+- **Secrets:** `EXPO_TOKEN` lives only in (a) the local Windows user
+  environment and (b) GitHub Actions secrets (sealed-box encrypted, write-only
+  to workflows). It appears in no file and no log. Rotate it at expo.dev if it
+  was ever exposed in plaintext (e.g. chat).
+- **Least-privilege workflows:** `ci.yml` has no secrets and needs none;
+  `release.yml` only gets `EXPO_TOKEN` + the built-in `contents:write` token,
+  and runs only on `v*` tags.
+- **Known accepted risks:** Dependabot flags `zod` and `node-forge` inside
+  Expo's local CLI tooling (transitive dev-only; the site ships zero deps and
+  EAS builds in Expo's cloud). Forcing overrides there risks breaking the
+  build chain; tracked upstream instead.
 
 ---
 
