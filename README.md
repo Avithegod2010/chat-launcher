@@ -86,7 +86,7 @@ npm test                    # node --test tests/
 
 ## Acknowledgments
 
-- Tiles use hand-drawn generic glyphs (no trademarked assets)
+- Brand glyphs (WhatsApp, Telegram, Signal, Viber, LINE, Threema) come from [Simple Icons](https://simpleicons.org) (CC0 path data). All marks are trademarks of their respective owners — Chat Launcher is not affiliated with any of them. Skype's brand was retired in 2025, so it keeps a generic glyph.
 - Country calling codes compiled from the ITU E.164 allocation list
 
 ## License
