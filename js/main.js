@@ -238,12 +238,6 @@ function renderTiles() {
       btn.style.setProperty('--tile', app.color);
       btn.style.setProperty('--i', String(i));
       btn.setAttribute('aria-label', `Open chat in ${app.name}`);
-      if (app.capability === 'limited') {
-        const badge = document.createElement('span');
-        badge.className = 'tile-badge';
-        badge.textContent = 'app only';
-        btn.append(badge);
-      }
       const icon = document.createElement('span');
       icon.className = 'tile-icon';
       icon.innerHTML = app.icon;
@@ -251,6 +245,12 @@ function renderTiles() {
       label.className = 'tile-label';
       label.textContent = app.name;
       btn.append(icon, label);
+      if (app.capability === 'limited') {
+        const badge = document.createElement('span');
+        badge.className = 'tile-badge';
+        badge.textContent = 'app only';
+        btn.append(badge);
+      }
       if (app.note) btn.title = app.note;
       if (app.id === state.defaultApp) btn.classList.add(highlightClass);
       btn.addEventListener('click', (e) => launch(app, e));

@@ -503,16 +503,15 @@ button {
   letter-spacing: 0.03em;
 }
 .tile-badge {
-  position: absolute;
-  top: 8px;
-  right: 8px;
+  /* In normal flow under the label so it never overlaps the glyph. */
   font-size: 0.55rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.07em;
   background: rgba(0, 0, 0, 0.4);
-  padding: 2.5px 7px;
+  padding: 2px 7px;
   border-radius: 999px;
+  margin-top: -4px;
 }
 .tile.highlight {
   outline: 2px solid var(--accent);
