@@ -726,10 +726,14 @@ function consumeParams() {
   const app = params.get('app');
 
   let candidate = number;
+  let minedFromText = false;
   if (!candidate && text) {
     // Share-target flow: mine any phone-like token out of the shared text.
     const m = text.match(/\+?\d[\d\s\-().]{6,18}\d/);
-    if (m) candidate = m[0];
+    if (m) {
+      candidate = m[0];
+      minedFromText = true;
+    }
   }
   if (candidate) {
     const parsed = parsePaste(candidate);
@@ -742,7 +746,9 @@ function consumeParams() {
       setNational(candidate);
     }
   }
-  if (text && !number) {
+  // The message applies for explicit deep links (?number=&text=) and for
+  // shared plain text — but not when the shared text itself WAS the number.
+  if (text && !minedFromText) {
     state.message = text.slice(0, 300);
     msgInput.value = state.message;
     $('#messageRow').classList.add('open');
