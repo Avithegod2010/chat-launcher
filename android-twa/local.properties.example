@@ -1,0 +1,2 @@
+# Copy to local.properties (never committed) and adjust for your machine:
+sdk.dir=E:\\Dev\\android-sdk

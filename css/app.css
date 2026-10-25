@@ -1049,6 +1049,10 @@ kbd {
   font-weight: 600;
 }
 
+.help-note {
+  margin-top: 14px;
+}
+
 /* -------------------------------------------------------------- toasts --- */
 #toasts {
   position: fixed;

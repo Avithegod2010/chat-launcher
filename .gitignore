@@ -14,3 +14,10 @@ keystore.*
 dist/
 *.apk
 *.aab
+
+# android-twa build artifacts
+android-twa/local.properties
+android-twa/.gradle/
+android-twa/build/
+android-twa/app/build/
+android-twa/app/local.properties

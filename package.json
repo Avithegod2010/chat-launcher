@@ -5,16 +5,17 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test tests/",
+    "test": "node --test tests/*.test.js",
     "serve": "node tools/serve.mjs",
-    "icons": "node tools/gen-icons.mjs"
+    "icons": "node tools/gen-icons.mjs",
+    "shots": "node tools/shoot.mjs"
   },
   "repository": {
     "type": "git",
     "url": "https://github.com/Avithegod2010/chat-launcher.git"
   },
   "license": "MIT",
-  "dependencies": {
+  "devDependencies": {
     "puppeteer-core": "^25.16.0"
   }
 }

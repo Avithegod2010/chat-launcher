@@ -1,0 +1,43 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'io.github.avithegod2010.chatlauncher'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "io.github.avithegod2010.chatlauncher"
+        minSdk 21
+        targetSdk 35
+        versionCode 1
+        versionName "1.0.0"
+    }
+
+    signingConfigs {
+        release {
+            // Signing material lives OUTSIDE the repo and CI passes credentials
+            // through environment variables — never committed.
+            storeFile file(System.getenv('CL_KEYSTORE') ?: '../chatlauncher-local.keystore')
+            storePassword System.getenv('CL_KEYSTORE_PASSWORD')
+            keyAlias 'chatlauncher'
+            keyPassword System.getenv('CL_KEYSTORE_PASSWORD')
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+}
+
+dependencies {
+    implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.6.2'
+}

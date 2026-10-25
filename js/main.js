@@ -276,9 +276,19 @@ function launch(app, event) {
     burst(event.clientX, event.clientY, app.color);
   }
   const url = app.buildUrl(e164, app.supportsMessage ? state.message : '');
-  const win = window.open(url, '_blank', 'noopener');
-  if (!win) {
-    // Popup blocked: fall back to same-tab navigation.
+  const isWebLink = url.startsWith('https://');
+  if (!isWebLink) {
+    // Custom schemes (tel:, sms:, viber:, …) hand off to the OS directly.
+    location.href = url;
+    return;
+  }
+  // With 'noopener' in the feature list window.open always returns null, so
+  // the popup-blocked fallback can't distinguish "blocked" — open without it
+  // and sever the opener reference instead.
+  const win = window.open(url, '_blank');
+  if (win) {
+    win.opener = null;
+  } else {
     location.href = url;
   }
 }
@@ -768,9 +778,12 @@ function registerServiceWorker() {
       .catch(() => toast('Offline support failed to install', { kind: 'warn' }));
   });
 
+  // Reload only when an UPDATED worker takes over — not on the very first
+  // install, where claim() fires controllerchange and a reload would flash.
+  const hadController = !!navigator.serviceWorker.controller;
   let reloaded = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (reloaded) return;
+    if (reloaded || !hadController) return;
     reloaded = true;
     location.reload();
   });
