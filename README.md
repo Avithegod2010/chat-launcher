@@ -58,7 +58,7 @@ Every messenger hides chat-by-number behind the same dance: save the contact, re
 - **Android (Chrome/Edge):** open the site → menu ⋮ → *Add to Home screen* / *Install app*
 - **iOS (Safari):** Share → *Add to Home Screen*
 - **Desktop (Chrome/Edge):** install icon in the address bar, or the in-app *Install* button
-- **Android APK:** a small TWA wrapper around this site is attached to [Releases](../../releases)
+- **Android APK:** a small Expo shell around this site is built on [Expo EAS](https://expo.dev) and attached to [Releases](../../releases) — it loads the live app, keeps everything up to date, and hands deep links (`wa.me`, `tel:`, …) to the operating system
 
 ## Run locally
 
@@ -82,6 +82,7 @@ npm test                    # node --test tests/
 - **CSP-hardened** — `script-src 'self'`, `connect-src 'none'`, `form-action 'none'`
 - **60 fps animations** — transforms/opacity only; drifting gradient orbs, staggered tiles, ripple ink, particle burst
 - Numbers are normalized to [E.164](https://www.itu.int/rec/T-REC-E.164) before link construction; see [CONTEXT.md](CONTEXT.md) for the domain vocabulary
+- **Android shell** (`expo-app/`) is a minimal React Native WebView container built with EAS — it contributes no UI of its own
 
 ## Acknowledgments
 

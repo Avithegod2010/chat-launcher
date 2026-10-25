@@ -14,7 +14,7 @@ should read this first so discussions use the same words.
 | **Capability: `full` / `limited`** | `full` = the deep link can address a specific phone number. `limited` = the platform has no open-by-number URL, so we can only open the app itself (LINE, Threema). Marked with an "app only" badge in the UI. |
 | **Preset message** | Optional pre-filled text handed to the target via `?text=` / `?body=` where the platform supports it. |
 | **Precache** | The service worker strategy: the entire app shell is cached on install, so the app works fully offline and loads instantly. |
-| **TWA** | Trusted Web Activity — an Android app that displays the PWA in Chrome's renderer without a browser UI. Built here with Bubblewrap. |
+| **Expo shell** | The Android app in `expo-app/`: a minimal React Native WebView container (built on EAS) that hosts the live PWA and forwards external links to the OS. It holds no UI or data of its own. |
 | **Share target** | Manifest feature letting the installed PWA appear in the Android share sheet; shared text is received as `?text=` and mined for a phone number. |
 
 ## Product rules of thumb

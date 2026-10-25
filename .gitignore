@@ -21,3 +21,10 @@ android-twa/.gradle/
 android-twa/build/
 android-twa/app/build/
 android-twa/app/local.properties
+
+# Expo app build artifacts
+expo-app/.expo/
+expo-app/dist/
+expo-app/android/
+expo-app/ios/
+expo-app/.eas/

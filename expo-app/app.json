@@ -1,0 +1,57 @@
+{
+  "expo": {
+    "name": "Chat Launcher",
+    "slug": "chat-launcher",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0b1020",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0b1020"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "io.github.avithegod2010.chatlauncher"
+    },
+    "android": {
+      "package": "io.github.avithegod2010.chatlauncher",
+      "versionCode": 1,
+      "permissions": [
+        "VIBRATE"
+      ],
+      "adaptiveIcon": {
+        "backgroundColor": "#0b1020",
+        "foregroundImage": "./assets/android-icon-foreground.png"
+      },
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "avithegod2010.github.io",
+              "pathPrefix": "/chat-launcher"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "23a14135-5f0d-4c9a-a9e8-d39d12cbd77a"
+      }
+    },
+    "owner": "avithegod-team"
+  }
+}
