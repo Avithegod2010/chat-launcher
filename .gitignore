@@ -1,0 +1,16 @@
+# local tooling artifacts
+.mimosa/
+node_modules/
+*.log
+.DS_Store
+Thumbs.db
+
+# Android / TWA build artifacts and signing material (never commit)
+android/
+*.keystore
+*.jks
+keystore.*
+.bubblewrap/
+dist/
+*.apk
+*.aab

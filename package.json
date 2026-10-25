@@ -1,0 +1,20 @@
+{
+  "name": "chat-launcher",
+  "version": "1.0.0",
+  "description": "Open any phone number's chat in WhatsApp, Telegram, Signal and more - instantly. A zero-dependency, offline-first PWA.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/",
+    "serve": "node tools/serve.mjs",
+    "icons": "node tools/gen-icons.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Avithegod2010/chat-launcher.git"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "puppeteer-core": "^25.16.0"
+  }
+}
