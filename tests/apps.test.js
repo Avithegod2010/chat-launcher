@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { APPS, getApp, isAppleDevice } from '../js/apps.js';
+import { APPS, getApp, isAppleDevice, isDesktopUA } from '../js/apps.js';
 
 const IN = '919876543210';
 const US = '15551234567';
@@ -85,4 +85,26 @@ test('message support flags match reality', () => {
   for (const id of ['telegram', 'signal', 'call', 'viber', 'skype', 'line', 'threema']) {
     assert.equal(getApp(id).supportsMessage, false, id);
   }
+});
+
+test('native app schemes are built for whatsapp and telegram only', () => {
+  const wa = getApp('whatsapp');
+  assert.equal(wa.appScheme('919876543210'), 'whatsapp://send?phone=%2B919876543210');
+  assert.equal(
+    wa.appScheme('919876543210', 'hi there'),
+    'whatsapp://send?phone=%2B919876543210&text=hi%20there',
+  );
+  assert.equal(getApp('telegram').appScheme('919876543210'), 'tg://resolve?phone=+919876543210');
+  for (const id of ['signal', 'sms', 'call', 'viber', 'skype', 'line', 'threema']) {
+    assert.equal(getApp(id).appScheme, undefined, `${id} has no app scheme`);
+  }
+});
+
+test('isDesktopUA separates desktop from mobile agents', () => {
+  const desktop = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/126.0';
+  const android = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) Chrome/126.0 Mobile';
+  const iPhone = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) Safari/605.1';
+  assert.equal(isDesktopUA(desktop), true);
+  assert.equal(isDesktopUA(android), false);
+  assert.equal(isDesktopUA(iPhone), false);
 });

@@ -2,7 +2,7 @@
   "expo": {
     "name": "Chat Launcher",
     "slug": "chat-launcher",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -18,7 +18,7 @@
     },
     "android": {
       "package": "io.github.avithegod2010.chatlauncher",
-      "versionCode": 2,
+      "versionCode": 3,
       "permissions": [
         "VIBRATE"
       ],
@@ -47,6 +47,7 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
+    "plugins": ["./plugins/shortcuts-plugin.js"],
     "extra": {
       "eas": {
         "projectId": "23a14135-5f0d-4c9a-a9e8-d39d12cbd77a"

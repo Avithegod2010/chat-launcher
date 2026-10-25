@@ -3,7 +3,7 @@
  * the app passes localStorage wrapped in try/catch by ui storage helper).
  *
  * Shape stored under `chatlauncher:history`:
- *   [{ e164, label, count, lastUsed, pinned }]
+ *   [{ e164, label, note, count, lastUsed, pinned }]
  * Ordered pinned-first, then most recently used. Capped at 50 entries,
  * dropping the oldest unpinned entries first.
  */
@@ -138,6 +138,20 @@ export function createHistory(storage) {
       const e = entries.find((x) => x.e164 === e164);
       if (e) {
         e.label = String(label).slice(0, 40);
+        write(entries);
+      }
+      return sorted(entries);
+    },
+
+    /**
+     * @param {string} e164
+     * @param {string} note short free-text note ("plumber — quoted 2k")
+     */
+    setNote(e164, note) {
+      const entries = read() ?? [];
+      const e = entries.find((x) => x.e164 === e164);
+      if (e) {
+        e.note = String(note).slice(0, 80);
         write(entries);
       }
       return sorted(entries);

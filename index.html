@@ -16,6 +16,7 @@
   <link rel="icon" href="./icons/favicon-32.png" type="image/png" sizes="32x32">
   <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
   <link rel="stylesheet" href="./css/app.css">
+  <script src="./js/vendor/qrcode-generator.js"></script>
   <script src="./js/theme-boot.js"></script>
 </head>
 <body>
@@ -66,24 +67,23 @@
         </button>
         <div class="phone-wrap">
           <input id="phone" class="phone-input" type="tel" inputmode="tel" autocomplete="tel-national"
-                 placeholder="Phone number" enterkeyhint="go" spellcheck="false">
+                 data-i18n-ph="placeholder" placeholder="Phone number" enterkeyhint="go" spellcheck="false">
           <span id="validity" class="validity idle" aria-hidden="true"></span>
         </div>
       </div>
       <p id="validityMsg" class="validity-msg" aria-live="polite"></p>
 
       <div class="hero-actions">
-        <button id="msgToggle" class="ghost-btn ripple" type="button" aria-expanded="false">+ Message</button>
-        <button id="padToggle" class="ghost-btn ripple" type="button" aria-expanded="false" aria-controls="dialPad">⌨ Dial pad</button>
-        <button id="copyBtn" class="ghost-btn ripple" type="button" aria-label="Copy number">
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5 15H4.5A1.5 1.5 0 0 1 3 13.5v-9A1.5 1.5 0 0 1 4.5 3h9A1.5 1.5 0 0 1 15 4.5V5"/></svg>
-          Copy
-        </button>
+        <button id="msgToggle" class="ghost-btn ripple" type="button" aria-expanded="false" data-i18n="addMessage">+ Message</button>
+        <button id="padToggle" class="ghost-btn ripple" type="button" aria-expanded="false" aria-controls="dialPad" data-i18n="dialpad">⌨ Dial pad</button>
+        <button id="qrBtn" class="ghost-btn ripple" type="button" data-i18n="qr">QR</button>
+        <button id="bulkBtn" class="ghost-btn ripple" type="button" data-i18n="bulk">☰ Bulk</button>
+        <button id="copyBtn" class="ghost-btn ripple" type="button" data-i18n="copy">Copy</button>
       </div>
 
       <div class="message-row" id="messageRow">
-        <input id="message" type="text" maxlength="300" placeholder="Pre-filled message (WhatsApp & SMS)" aria-label="Pre-filled message">
-        <span class="hint">sent where supported</span>
+        <input id="message" type="text" maxlength="300" data-i18n-ph="messagePlaceholder" placeholder="Pre-filled message (WhatsApp & SMS)" aria-label="Pre-filled message">
+        <span class="hint" data-i18n="messageHint">sent where supported</span>
       </div>
 
       <div class="dial-pad" id="dialPad" aria-label="Dial pad">
@@ -103,23 +103,26 @@
     </section>
 
     <section aria-label="Launch targets">
-      <div class="section-title">Launch a chat <small id="tileCount"></small></div>
+      <div class="section-title"><span data-i18n="launchTitle">Launch a chat</span> <small id="tileCount"></small></div>
       <div class="grid" id="grid"></div>
     </section>
 
     <section aria-label="History">
       <div class="history-head">
-        <div class="section-title">History</div>
-        <button id="historyClear" class="ghost-btn ripple" type="button" hidden>Clear all</button>
+        <div class="section-title" data-i18n="historyTitle">History</div>
+        <button id="historyClear" class="ghost-btn ripple" type="button" hidden data-i18n="clearAll">Clear all</button>
       </div>
-      <div id="historyEmpty" class="history-empty">No history yet — launch a chat and it shows up here.<br>Everything stays on this device.</div>
+      <div id="historyEmpty" class="history-empty">
+        <span data-i18n="historyEmpty">No history yet — launch a chat and it shows up here.</span><br>
+        <span data-i18n="historyEmpty2">Everything stays on this device.</span>
+      </div>
       <div class="history-list" id="historyList"></div>
     </section>
   </main>
 
   <footer class="site-footer">
-    <span>no tracking · works offline · MIT</span>
-    <button id="installBtn" class="install-btn ripple" type="button" hidden>⬇ Install app</button>
+    <span data-i18n="tagline">no tracking · works offline · MIT</span>
+    <button id="installBtn" class="install-btn ripple" type="button" hidden data-i18n="install">⬇ Install app</button>
   </footer>
 
   <div class="sheet-wrap" id="countrySheet" role="dialog" aria-label="Choose country" aria-modal="true">
@@ -136,42 +139,92 @@
 
   <dialog id="settingsDialog">
     <div class="dialog-head">
-      <h2 class="dialog-title">Settings</h2>
+      <h2 class="dialog-title" data-i18n="settings">Settings</h2>
       <button class="icon-btn ripple" id="settingsClose" type="button" aria-label="Close settings">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 6 12 12M18 6 6 18"/></svg>
       </button>
     </div>
     <div class="dialog-body">
       <div class="theme-group" id="themeGroup" role="radiogroup" aria-label="Theme">
-        <label><input type="radio" name="theme" value="system"><span>System</span></label>
-        <label><input type="radio" name="theme" value="light"><span>Light</span></label>
-        <label><input type="radio" name="theme" value="dark"><span>Dark</span></label>
+        <label><input type="radio" name="theme" value="system"><span data-i18n="system">System</span></label>
+        <label><input type="radio" name="theme" value="light"><span data-i18n="light">Light</span></label>
+        <label><input type="radio" name="theme" value="dark"><span data-i18n="dark">Dark</span></label>
       </div>
+      <div class="theme-group" id="langGroup" role="radiogroup" aria-label="Language">
+        <label><input type="radio" name="lang" value="en"><span>English</span></label>
+        <label><input type="radio" name="lang" value="hi"><span>हिन्दी</span></label>
+      </div>
+      <div class="settings-label" data-i18n="accent">Accent</div>
+      <div class="accent-row" id="accentRow"></div>
       <div id="tileSettings"></div>
       <div class="settings-footer">
-        <button id="clearDataBtn" class="btn danger-btn" type="button">Wipe all local data…</button>
+        <button id="usageOpen" class="btn" type="button" data-i18n="usage">Your usage (local only)</button>
+        <button id="clearDataBtn" class="btn danger-btn" type="button" data-i18n="wipeData">Wipe all local data…</button>
         <p class="version-note" id="versionNote"></p>
       </div>
     </div>
   </dialog>
 
+  <dialog id="usageDialog">
+    <div class="dialog-head">
+      <h2 class="dialog-title" data-i18n="usage">Your usage (local only)</h2>
+      <button class="icon-btn ripple" id="usageClose" type="button" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 6 12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+    <div class="dialog-body" id="usageBody"></div>
+  </dialog>
+
+  <dialog id="qrDialog">
+    <div class="dialog-head">
+      <h2 class="dialog-title" data-i18n="qrTitle">Scan to open on a phone</h2>
+      <button class="icon-btn ripple" id="qrClose" type="button" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 6 12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+    <div class="dialog-body">
+      <div class="qr-wrap"><canvas aria-label="QR code"></canvas></div>
+      <p class="qr-hint"></p>
+      <div class="dialog-actions">
+        <button type="button" class="btn qr-copy" data-i18n="shareLink">Share link</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="bulkDialog">
+    <div class="dialog-head">
+      <h2 class="dialog-title" data-i18n="bulkTitle">Bulk launch</h2>
+      <button class="icon-btn ripple" id="bulkClose" type="button" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 6 12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+    <div class="dialog-body">
+      <textarea id="bulkTextarea" class="bulk-textarea" rows="4" data-i18n-ph="bulkPlaceholder" placeholder="Paste numbers — one per line or comma-separated"></textarea>
+      <div class="dialog-actions between">
+        <button id="bulkParse" type="button" class="btn" data-i18n="bulkParse">Load numbers</button>
+        <button id="bulkOpenAll" type="button" class="btn-primary btn" data-i18n="bulkOpenAll" disabled>Open all</button>
+      </div>
+      <div id="bulkRows" class="bulk-rows"></div>
+    </div>
+  </dialog>
+
   <dialog id="helpDialog">
     <div class="dialog-head">
-      <h2 class="dialog-title">Help &amp; shortcuts</h2>
+      <h2 class="dialog-title" data-i18n="helpTitle">Help &amp; shortcuts</h2>
       <button class="icon-btn ripple" id="helpClose" type="button" aria-label="Close help">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 6 12 12M18 6 6 18"/></svg>
       </button>
     </div>
     <div class="dialog-body">
       <table class="shortcut-table">
-        <tr><td><kbd>/</kbd></td><td>Focus the number field</td></tr>
-        <tr><td><kbd>Enter</kbd></td><td>Launch with the first (or highlighted) app</td></tr>
-        <tr><td><kbd>Ctrl</kbd>+<kbd>1–9</kbd></td><td>Launch with the nth app tile</td></tr>
-        <tr><td><kbd>t</kbd></td><td>Switch theme</td></tr>
-        <tr><td><kbd>d</kbd></td><td>Toggle the dial pad</td></tr>
-        <tr><td><kbd>?</kbd></td><td>This dialog</td></tr>
+        <tr><td><kbd>/</kbd></td><td data-i18n="helpFocus">Focus the number field</td></tr>
+        <tr><td><kbd>Enter</kbd></td><td data-i18n="helpEnter">Launch with the first (or highlighted) app</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>1–9</kbd></td><td data-i18n="helpCtrl">Launch with the nth app tile</td></tr>
+        <tr><td><kbd>t</kbd></td><td data-i18n="helpTheme">Switch theme</td></tr>
+        <tr><td><kbd>d</kbd></td><td data-i18n="helpPad">Toggle the dial pad</td></tr>
+        <tr><td><kbd>?</kbd></td><td data-i18n="helpHelp">This dialog</td></tr>
       </table>
-      <p class="help-note">Paste a full international number (like <b>+91 98765 43210</b>) and the country is detected automatically. A pre-filled message is delivered on WhatsApp and SMS. LINE and Threema are <i>app only</i> targets — they have no open-by-number link, so those tiles just open the app.</p>
+      <p class="help-note" data-i18n="helpNote">Paste a full international number (like +91 98765 43210) and the country is detected automatically. A pre-filled message is delivered on WhatsApp and SMS. LINE and Threema are app only targets — they have no open-by-number link, so those tiles just open the app. On desktop, right-click the WhatsApp or Telegram tile to open the native app instead of the website.</p>
     </div>
   </dialog>
 
@@ -179,10 +232,10 @@
     <form>
       <div class="dialog-head"><h2 class="dialog-title">Title</h2></div>
       <div class="dialog-body">
-        <input class="text-input" type="text" maxlength="40" aria-label="Value">
+        <input class="text-input" type="text" maxlength="80" aria-label="Value">
         <div class="dialog-actions">
-          <button type="button" class="btn dialog-cancel">Cancel</button>
-          <button type="submit" class="btn-primary btn dialog-confirm">Save</button>
+          <button type="button" class="btn dialog-cancel" data-i18n="cancel">Cancel</button>
+          <button type="submit" class="btn-primary btn dialog-confirm" data-i18n="save">Save</button>
         </div>
       </div>
     </form>

@@ -3,10 +3,19 @@
  * Wires state, rendering, events, keyboard shortcuts, URL params,
  * service-worker updates and the PWA install prompt.
  */
-import { APPS, DEFAULT_ORDER, getApp, isAppleDevice } from './apps.js';
-import { COUNTRIES, countryByIso, flagOf, matchDialCode, primaryCountryForDial } from './countries.js';
-import { digitsOnly, formatAsYouType, isValid, parsePaste, toE164 } from './phone.js';
+import { APPS, DEFAULT_ORDER, getApp, isAppleDevice, isDesktopUA } from './apps.js';
+import {
+  COUNTRIES,
+  countryByIso,
+  flagOf,
+  matchDialCode,
+  primaryCountryForDial,
+} from './countries.js';
+import { checkNumber, digitsOnly, formatAsYouType, parsePaste, toE164 } from './phone.js';
 import { createHistory } from './history.js';
+import { createStats } from './stats.js';
+import { drawQr } from './qr.js';
+import { availableLangs, initLang, setLang, t } from './i18n.js';
 import {
   attachRipples,
   askText,
@@ -20,17 +29,25 @@ import {
   warnStorageOnce,
 } from './ui.js';
 
-const APP_VERSION = '1.1.0';
+const APP_VERSION = '1.2.0';
 const SETTINGS_KEY = 'chatlauncher:settings';
 const $ = (sel) => document.querySelector(sel);
+
+const ACCENTS = {
+  violet: ['#6c5cf6', '#a855f7'],
+  ocean: ['#0ea5e9', '#6366f1'],
+  sunset: ['#f97316', '#ef4444'],
+  emerald: ['#10b981', '#3b82f6'],
+};
 
 /* ------------------------------------------------------------------ state */
 
 const { ok: storageOk, backend: storage } = safeStorage();
 const history = createHistory(storage);
+const stats = createStats(storage);
 
-/** @type {{theme: 'system'|'light'|'dark', country: string|null,
- *          order: string[], disabled: string[]}} */
+/** @type {{theme: string, country: string|null, order: string[],
+ *          disabled: string[], accent: string}} */
 let settings = loadSettings();
 
 const state = {
@@ -48,9 +65,10 @@ function loadSettings() {
       country: typeof raw.country === 'string' ? raw.country : null,
       order: Array.isArray(raw.order) ? raw.order.filter((id) => getApp(id)) : [...DEFAULT_ORDER],
       disabled: Array.isArray(raw.disabled) ? raw.disabled.filter((id) => getApp(id)) : [],
+      accent: ACCENTS[raw.accent] ? raw.accent : 'violet',
     };
   } catch {
-    return { theme: 'system', country: null, order: [...DEFAULT_ORDER], disabled: [] };
+    return { theme: 'system', country: null, order: [...DEFAULT_ORDER], disabled: [], accent: 'violet' };
   }
 }
 
@@ -71,6 +89,32 @@ function detectCountryIso() {
   return null;
 }
 
+/* --------------------------------------------------------------- i18n -- */
+
+initLang(storage);
+
+/** Translate all static [data-i18n] / [data-i18n-ph] elements. */
+function applyStaticTranslations() {
+  document.querySelectorAll('[data-i18n]').forEach((el) => {
+    el.textContent = t(el.dataset.i18n);
+  });
+  document.querySelectorAll('[data-i18n-ph]').forEach((el) => {
+    el.placeholder = t(el.dataset.i18nPh);
+  });
+  document.querySelectorAll('[data-i18n-aria]').forEach((el) => {
+    el.setAttribute('aria-label', t(el.dataset.i18nAria));
+  });
+}
+
+function switchLang(lang) {
+  setLang(lang, storage);
+  applyStaticTranslations();
+  renderTiles();
+  renderHistory();
+  updateValidity();
+  renderSettings();
+}
+
 /* ------------------------------------------------------------------ theme */
 
 const systemDark = window.matchMedia('(prefers-color-scheme: dark)');
@@ -80,6 +124,12 @@ function applyTheme() {
     settings.theme === 'system' ? (systemDark.matches ? 'dark' : 'light') : settings.theme;
   document.documentElement.dataset.theme = resolved;
   $('meta[name="theme-color"]')?.setAttribute('content', resolved === 'dark' ? '#0b1020' : '#eef0fb');
+}
+
+function applyAccent() {
+  const [a, b] = ACCENTS[settings.accent] ?? ACCENTS.violet;
+  document.documentElement.style.setProperty('--accent', a);
+  document.documentElement.style.setProperty('--accent-2', b);
 }
 
 function cycleTheme() {
@@ -92,7 +142,7 @@ function cycleTheme() {
   } else {
     flip();
   }
-  toast(`Theme: ${settings.theme}`);
+  toast(t('themeNow', { theme: settings.theme }));
 }
 
 /* ------------------------------------------------------------------ input */
@@ -101,28 +151,40 @@ const phoneInput = $('#phone');
 const validityDot = $('#validity');
 const validityMsg = $('#validityMsg');
 
-function currentE164() {
+function currentCheck() {
   const country = countryByIso(state.iso);
-  if (!country) return null;
-  return toE164(country.dial, state.national, { iso: state.iso });
+  if (!country) return { state: 'bad', e164: null, typed: state.national.length, min: 7, max: 15 };
+  return checkNumber(country.dial, state.national, state.iso);
+}
+
+function currentE164() {
+  const c = currentCheck();
+  return c.state === 'ok' ? c.e164 : null;
 }
 
 function updateValidity() {
-  const e = currentE164();
-  const ok = !!e && isValid(e);
-  validityDot.dataset.state = state.national ? (ok ? 'ok' : 'partial') : 'idle';
-  if (!state.national) {
+  const c = currentCheck();
+  const country = countryByIso(state.iso);
+  if (c.state === 'empty') {
     validityDot.className = 'validity idle';
     validityMsg.textContent = '';
-  } else if (ok) {
+  } else if (c.state === 'ok') {
     validityDot.className = 'validity ok';
-    validityMsg.textContent = `Looks good: +${e}`;
+    validityMsg.textContent = `${t('looksGood')} +${c.e164}`;
+  } else if (c.state === 'short' || c.state === 'long') {
+    validityDot.className = 'validity partial';
+    const name = country?.name ?? '';
+    if (c.min === c.max) {
+      validityMsg.textContent =
+        c.state === 'short'
+          ? t('numberShort', { n: c.max, country: name, typed: c.typed })
+          : t('numberLong', { n: c.max, country: name });
+    } else {
+      validityMsg.textContent = `${t('keepTyping')} ${c.typed} ${t('digitsSoFar')} (${c.min}–${c.max})`;
+    }
   } else {
     validityDot.className = 'validity partial';
-    const country = countryByIso(state.iso);
-    validityMsg.textContent = `Keep typing… ${country?.dial ?? ''} number, ${
-      state.national.length
-    } digits so far`;
+    validityMsg.textContent = `${t('keepTyping')} ${c.typed} ${t('digitsSoFar')}`;
   }
 }
 
@@ -145,9 +207,8 @@ phoneInput.addEventListener('paste', (e) => {
     saveCountry();
     updateCountryChip();
     setNational(parsed.national);
-    toast(`${flagOf(parsed.iso)} ${countryByIso(parsed.iso)?.name} detected`);
+    toast(t('countryDetected', { flag: flagOf(parsed.iso), country: countryByIso(parsed.iso)?.name }));
   }
-  // Otherwise: let the native paste happen; the input handler strips formatting.
 });
 
 function saveCountry() {
@@ -229,6 +290,7 @@ function orderedApps() {
 
 function renderTiles() {
   const apps = orderedApps();
+  $('#tileCount').textContent = `${apps.length}`;
   grid.replaceChildren(
     ...apps.map((app, i) => {
       const btn = document.createElement('button');
@@ -237,7 +299,7 @@ function renderTiles() {
       btn.dataset.app = app.id;
       btn.style.setProperty('--tile', app.color);
       btn.style.setProperty('--i', String(i));
-      btn.setAttribute('aria-label', `Open chat in ${app.name}`);
+      btn.setAttribute('aria-label', `${t('launchTitle2')} ${app.name}`);
       const icon = document.createElement('span');
       icon.className = 'tile-icon';
       icon.innerHTML = app.icon;
@@ -254,6 +316,18 @@ function renderTiles() {
       if (app.note) btn.title = app.note;
       if (app.id === state.defaultApp) btn.classList.add(highlightClass);
       btn.addEventListener('click', (e) => launch(app, e));
+      // Desktop: right-click a WhatsApp/Telegram tile to force the native app.
+      if (app.appScheme && isDesktopUA()) {
+        btn.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          const e164 = currentE164();
+          if (!e164) {
+            toast(t('enterValid'), { kind: 'warn' });
+            return;
+          }
+          location.href = app.appScheme(e164, app.supportsMessage ? state.message : '');
+        });
+      }
       return btn;
     }),
   );
@@ -263,34 +337,35 @@ function renderTiles() {
 
 function launch(app, event) {
   const e164 = currentE164();
-  if (!e164 || !isValid(e164)) {
+  if (!e164) {
     shake($('#heroCard'));
-    toast('Enter a valid phone number first', { kind: 'warn' });
+    toast(t('enterValid'), { kind: 'warn' });
     phoneInput.focus();
     return;
   }
+  launchNumber(app, e164);
+  if (event) burst(event.clientX, event.clientY, app.color);
+}
+
+/** Shared by single launch and bulk rows. */
+function launchNumber(app, e164, message = state.message) {
   history.add(e164);
   renderHistory();
+  stats.record(app.id);
   vibrate(8);
-  if (event) {
-    burst(event.clientX, event.clientY, app.color);
-  }
-  const url = app.buildUrl(e164, app.supportsMessage ? state.message : '');
+  const url = app.buildUrl(e164, app.supportsMessage ? message : '');
   const isWebLink = url.startsWith('https://');
   if (!isWebLink) {
-    // Custom schemes (tel:, sms:, viber:, …) hand off to the OS directly.
     location.href = url;
-    return;
+    return true;
   }
-  // With 'noopener' in the feature list window.open always returns null, so
-  // the popup-blocked fallback can't distinguish "blocked" — open without it
-  // and sever the opener reference instead.
   const win = window.open(url, '_blank');
   if (win) {
     win.opener = null;
-  } else {
-    location.href = url;
+    return true;
   }
+  location.href = url;
+  return true;
 }
 
 function launchDefault() {
@@ -315,6 +390,11 @@ function flagForE164(e164) {
   return c ? flagOf(c.iso) : '🌐';
 }
 
+function countryForE164(e164) {
+  const dial = matchDialCode(e164);
+  return dial ? primaryCountryForDial(dial) : null;
+}
+
 function renderHistory() {
   const entries = history.list();
   const empty = $('#historyEmpty');
@@ -334,7 +414,16 @@ function renderHistory() {
       flag.textContent = flagForE164(entry.e164);
       const label = document.createElement('span');
       label.className = 'chip-label';
-      label.textContent = entry.label || formatAsYouType(entry.e164);
+      const nameLine = document.createElement('span');
+      nameLine.className = 'chip-name';
+      nameLine.textContent = entry.label || formatAsYouType(entry.e164);
+      label.append(nameLine);
+      if (entry.note) {
+        const note = document.createElement('span');
+        note.className = 'chip-note';
+        note.textContent = entry.note;
+        label.append(note);
+      }
       chip.append(flag, label);
       if (entry.count > 1) {
         const count = document.createElement('span');
@@ -350,8 +439,7 @@ function renderHistory() {
         chip.append(pin);
       }
       chip.addEventListener('click', () => {
-        const dial = matchDialCode(entry.e164);
-        const c = dial ? COUNTRIES.find((x) => x.dial === dial) : null;
+        const c = countryForE164(entry.e164);
         if (c) {
           state.iso = c.iso;
           saveCountry();
@@ -366,7 +454,7 @@ function renderHistory() {
       const more = document.createElement('button');
       more.type = 'button';
       more.className = 'chip-more';
-      more.setAttribute('aria-label', `Actions for ${entry.label || entry.e164}`);
+      more.setAttribute('aria-label', `⋯ ${entry.label || entry.e164}`);
       more.textContent = '⋯';
       more.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -399,37 +487,43 @@ function openChipMenu(anchor, entry) {
     });
     menu.append(b);
   };
-  mk(entry.pinned ? 'Unpin' : 'Pin', () => {
+  mk(entry.pinned ? t('unpin') : t('pin'), () => {
     (entry.pinned ? history.unpin : history.pin).call(history, entry.e164);
     renderHistory();
   });
-  mk('Rename', async () => {
-    const label = await askText({
-      title: 'Rename entry',
-      value: entry.label || '',
-      placeholder: 'e.g. Pizza place',
-    });
+  mk(t('rename'), async () => {
+    const label = await askText({ title: t('rename'), value: entry.label || '' });
     if (label !== null) {
       history.renameLabel(entry.e164, label);
       renderHistory();
     }
   });
-  mk('Copy number', async () => {
-    try {
-      await navigator.clipboard.writeText(`+${entry.e164}`);
-      toast('Number copied', { kind: 'good' });
-    } catch {
-      toast('Clipboard blocked by the browser', { kind: 'warn' });
+  mk(entry.note ? t('editNote') : t('addNote'), async () => {
+    const note = await askText({
+      title: entry.note ? t('editNote') : t('addNote'),
+      value: entry.note || '',
+      placeholder: t('notePlaceholder'),
+    });
+    if (note !== null) {
+      history.setNote(entry.e164, note);
+      renderHistory();
     }
   });
+  mk(t('copyNumber'), async () => {
+    try {
+      await navigator.clipboard.writeText(`+${entry.e164}`);
+      toast(t('copied'), { kind: 'good' });
+    } catch {
+      toast(t('clipboardBlocked'), { kind: 'warn' });
+    }
+  });
+  mk(t('qr'), () => openQr(entry.e164));
   if (navigator.share) {
-    mk('Share link', () => {
-      navigator
-        .share({ text: `Chat with +${entry.e164}`, url: shareUrl(entry.e164) })
-        .catch(() => {});
+    mk(t('shareLink'), () => {
+      navigator.share({ text: `+${entry.e164}`, url: shareUrl(entry.e164) }).catch(() => {});
     });
   }
-  mk('Delete', () => {
+  mk(t('delete'), () => {
     history.remove(entry.e164);
     renderHistory();
   }, true);
@@ -437,8 +531,6 @@ function openChipMenu(anchor, entry) {
   document.body.append(menu);
   const r = anchor.getBoundingClientRect();
   menu.style.top = `${r.bottom + 6}px`;
-  const right = Math.min(r.right, window.innerWidth - 8);
-  menu.style.left = `${Math.max(8, right - menu.offsetWidth)}px`;
   requestAnimationFrame(() => {
     const w = menu.offsetWidth;
     menu.style.left = `${Math.max(8, Math.min(r.right - w, window.innerWidth - w - 8))}px`;
@@ -468,17 +560,18 @@ clearBtn.addEventListener('click', () => {
   if (clearArmed) {
     clearTimeout(clearArmed);
     clearArmed = null;
-    clearBtn.textContent = 'Clear all';
+    clearBtn.textContent = t('clearAll');
     clearBtn.classList.remove('armed');
     history.clear();
     renderHistory();
-    toast('History cleared', { kind: 'good' });
+    stats.clear();
+    toast(t('wiped'), { kind: 'good' });
   } else {
-    clearBtn.textContent = 'Really clear?';
+    clearBtn.textContent = t('reallyClear');
     clearBtn.classList.add('armed');
     clearArmed = setTimeout(() => {
       clearArmed = null;
-      clearBtn.textContent = 'Clear all';
+      clearBtn.textContent = t('clearAll');
       clearBtn.classList.remove('armed');
     }, 2600);
   }
@@ -515,7 +608,7 @@ pad.querySelectorAll('[data-key]').forEach((key) => {
             setNational(text);
           }
         })
-        .catch(() => toast('Clipboard unavailable', { kind: 'warn' }));
+        .catch(() => toast(t('clipboardUnavailable'), { kind: 'warn' }));
     } else {
       setNational(state.national + k);
     }
@@ -532,7 +625,7 @@ msgToggle.addEventListener('click', () => {
   const row = $('#messageRow');
   const open = row.classList.toggle('open');
   msgToggle.setAttribute('aria-expanded', String(open));
-  msgToggle.textContent = open ? '− Message' : '+ Message';
+  msgToggle.textContent = open ? t('removeMessage') : t('addMessage');
   if (open) msgInput.focus();
   else if (!msgInput.value) state.message = '';
 });
@@ -540,19 +633,144 @@ msgInput.addEventListener('input', () => {
   state.message = msgInput.value.slice(0, 300);
 });
 
+/* ------------------------------------------------------------ QR dialog */
+
+$('#qrBtn').addEventListener('click', () => {
+  const e164 = currentE164();
+  if (!e164) {
+    toast(t('enterValid'), { kind: 'warn' });
+    return;
+  }
+  openQr(e164);
+});
+
+function openQr(e164) {
+  const dlg = $('#qrDialog');
+  const canvas = dlg.querySelector('canvas');
+  const ok = drawQr(canvas, shareUrl(e164));
+  dlg.querySelector('.qr-hint').textContent = t('qrHint');
+  dlg.querySelector('.qr-copy').onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(shareUrl(e164));
+      toast(t('copied'), { kind: 'good' });
+    } catch {
+      toast(t('clipboardBlocked'), { kind: 'warn' });
+    }
+  };
+  if (!ok) {
+    toast(t('clipboardUnavailable'), { kind: 'warn' });
+  }
+  dlg.showModal();
+}
+$('#qrClose').addEventListener('click', () => $('#qrDialog').close());
+
+/* -------------------------------------------------------------- bulk mode */
+
+$('#bulkBtn').addEventListener('click', () => {
+  $('#bulkRows').replaceChildren();
+  $('#bulkTextarea').value = '';
+  $('#bulkOpenAll').disabled = true;
+  $('#bulkDialog').showModal();
+});
+$('#bulkClose').addEventListener('click', () => $('#bulkDialog').close());
+
+$('#bulkParse').addEventListener('click', () => {
+  const raw = $('#bulkTextarea').value;
+  const tokens = raw.split(/[\n,;]+/).map((s) => s.trim()).filter(Boolean);
+  const country = countryByIso(state.iso);
+  const rows = [];
+  for (const tok of tokens.slice(0, 50)) {
+    const parsed = parsePaste(tok);
+    let e164 = null;
+    if (parsed) {
+      e164 = toE164(parsed.dial, parsed.national, { iso: parsed.iso });
+    } else if (country) {
+      e164 = toE164(country.dial, tok, { iso: state.iso });
+    }
+    const dial = parsed?.dial ?? country?.dial ?? '';
+    const iso = parsed?.iso ?? state.iso;
+    const national = parsed ? parsed.national : digitsOnly(tok);
+    rows.push({
+      token: tok,
+      e164,
+      valid: !!e164 && dial !== '' && checkNumber(dial, national, iso).state === 'ok',
+    });
+  }
+  renderBulkRows(rows);
+  const validCount = rows.filter((r) => r.valid).length;
+  if (!validCount) toast(t('bulkNoneValid'), { kind: 'warn' });
+  else toast(t('bulkRowsReady', { n: validCount }));
+  $('#bulkOpenAll').disabled = validCount === 0;
+});
+
+function renderBulkRows(rows) {
+  const list = $('#bulkRows');
+  const defaultApp = (state.defaultApp && getApp(state.defaultApp)) || orderedApps()[0];
+  list.replaceChildren(
+    ...rows.map((row) => {
+      const el = document.createElement('div');
+      el.className = 'bulk-row' + (row.valid ? '' : ' invalid');
+      const num = document.createElement('span');
+      num.className = 'bulk-num';
+      num.textContent = row.e164 ? `+${row.e164}` : row.token;
+      const stateSpan = document.createElement('span');
+      stateSpan.className = 'bulk-state';
+      stateSpan.textContent = row.valid ? '✓' : '✕';
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn ripple';
+      btn.textContent = defaultApp?.name ?? t('launchTitle2');
+      btn.disabled = !row.valid;
+      btn.addEventListener('click', () => {
+        if (defaultApp && row.e164) launchNumber(defaultApp, row.e164);
+      });
+      el.append(stateSpan, num, btn);
+      return el;
+    }),
+  );
+}
+
+$('#bulkOpenAll').addEventListener('click', () => {
+  const rows = [...document.querySelectorAll('#bulkRows .bulk-row')];
+  const app = (state.defaultApp && getApp(state.defaultApp)) || orderedApps()[0];
+  let opened = 0;
+  let blocked = 0;
+  rows.forEach((row, i) => {
+    const num = row.querySelector('.bulk-num').textContent;
+    const e164 = num.startsWith('+') ? num.slice(1) : '';
+    const valid = !row.classList.contains('invalid');
+    if (!valid || !app) return;
+    setTimeout(() => {
+      history.add(e164);
+      stats.record(app.id);
+      const url = app.buildUrl(e164, app.supportsMessage ? state.message : '');
+      const win = window.open(url, '_blank');
+      if (win) {
+        win.opener = null;
+        opened++;
+      } else {
+        blocked++;
+      }
+      if (i === rows.length - 1 && blocked > 0) {
+        toast(t('bulkBlockedPopup', { n: blocked }), { kind: 'warn', timeout: 6000 });
+      }
+    }, i * 400);
+  });
+});
+
 /* -------------------------------------------------------------- copy/share */
 
 $('#copyBtn').addEventListener('click', async () => {
   const e164 = currentE164();
-  if (!e164 || !isValid(e164)) {
-    toast('Enter a valid number first', { kind: 'warn' });
+  if (!e164) {
+    toast(t('enterValid'), { kind: 'warn' });
     return;
   }
   try {
     await navigator.clipboard.writeText(`+${e164}`);
-    toast('Number copied', { kind: 'good' });
+    toast(t('copied'), { kind: 'good' });
   } catch {
-    toast('Clipboard blocked by the browser', { kind: 'warn' });
+    toast(t('clipboardBlocked'), { kind: 'warn' });
   }
 });
 
@@ -576,6 +794,31 @@ function renderSettings() {
       applyTheme();
     };
   });
+
+  const langGroup = $('#langGroup');
+  const currentLang = document.documentElement.lang || 'en';
+  langGroup.querySelectorAll('input').forEach((input) => {
+    input.checked = input.value === currentLang;
+    input.onchange = () => switchLang(input.value);
+  });
+
+  const accentRow = $('#accentRow');
+  accentRow.replaceChildren(
+    ...Object.entries(ACCENTS).map(([name, [a, b]]) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'accent-swatch' + (settings.accent === name ? ' active' : '');
+      btn.style.background = `linear-gradient(135deg, ${a}, ${b})`;
+      btn.setAttribute('aria-label', `${t('accent')}: ${name}`);
+      btn.addEventListener('click', () => {
+        settings.accent = name;
+        saveSettings();
+        applyAccent();
+        renderSettings();
+      });
+      return btn;
+    }),
+  );
 
   const list = $('#tileSettings');
   const all = [...settings.order, ...DEFAULT_ORDER.filter((id) => !settings.order.includes(id))];
@@ -613,7 +856,7 @@ function renderSettings() {
       toggle.className = 'switch' + (settings.disabled.includes(id) ? '' : ' on');
       toggle.setAttribute('role', 'switch');
       toggle.setAttribute('aria-checked', String(!settings.disabled.includes(id)));
-      toggle.setAttribute('aria-label', `Show ${app.name}`);
+      toggle.setAttribute('aria-label', `${app.name}`);
       toggle.addEventListener('click', () => {
         settings.disabled = settings.disabled.includes(id)
           ? settings.disabled.filter((x) => x !== id)
@@ -628,7 +871,8 @@ function renderSettings() {
     }),
   );
 
-  $('#versionNote').textContent = `Chat Launcher v${APP_VERSION} · ${storageOk ? 'data stored on this device' : 'storage blocked (session only)'}`;
+  $('#versionNote').textContent =
+    `Chat Launcher v${APP_VERSION} · ${storageOk ? t('dataOnDevice') : t('storageBlocked')}`;
 }
 
 function moveTile(id, delta) {
@@ -643,14 +887,58 @@ function moveTile(id, delta) {
   renderSettings();
 }
 
+$('#usageOpen').addEventListener('click', () => {
+  renderUsage();
+  $('#usageDialog').showModal();
+});
+$('#usageClose').addEventListener('click', () => $('#usageDialog').close());
+
+function renderUsage() {
+  const s = stats.get();
+  const wrap = $('#usageBody');
+  const month = (() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  })();
+  const totalEl = document.createElement('p');
+  totalEl.className = 'usage-total';
+  totalEl.textContent = s.total
+    ? `${t('usageTotal', { n: s.total })} · ${t('usageMonth', { n: s.byMonth[month] ?? 0 })}`
+    : t('usageNone');
+  wrap.replaceChildren(totalEl);
+  const entries = Object.entries(s.byApp).sort((a, b) => b[1] - a[1]).slice(0, 6);
+  const max = entries[0]?.[1] ?? 1;
+  for (const [appId, count] of entries) {
+    const app = getApp(appId);
+    const row = document.createElement('div');
+    row.className = 'stat-row';
+    const name = document.createElement('span');
+    name.className = 'stat-name';
+    name.textContent = app?.name ?? appId;
+    const bar = document.createElement('span');
+    bar.className = 'stat-bar';
+    const fill = document.createElement('span');
+    fill.className = 'stat-fill';
+    fill.style.width = `${Math.round((count / max) * 100)}%`;
+    if (app) fill.style.background = app.color;
+    bar.append(fill);
+    const num = document.createElement('span');
+    num.className = 'stat-num';
+    num.textContent = String(count);
+    row.append(name, bar, num);
+    wrap.append(row);
+  }
+}
+
 $('#clearDataBtn').addEventListener('click', async () => {
   const sure = await askText({
-    title: 'Type DELETE to wipe all local data',
+    title: t('typeDelete'),
     placeholder: 'DELETE',
-    confirmLabel: 'Wipe',
+    confirmLabel: t('wipe'),
   });
   if (sure === 'DELETE') {
     history.clear();
+    stats.clear();
     try {
       storage.removeItem(SETTINGS_KEY);
     } catch {
@@ -662,10 +950,11 @@ $('#clearDataBtn').addEventListener('click', async () => {
     renderHistory();
     updateCountryChip();
     applyTheme();
+    applyAccent();
     settingsDialog.close();
-    toast('All local data wiped', { kind: 'good' });
+    toast(t('wiped'), { kind: 'good' });
   } else if (sure !== null) {
-    toast('Nothing was deleted', { kind: 'warn' });
+    toast(t('nothingDeleted'), { kind: 'warn' });
   }
 });
 
@@ -728,7 +1017,6 @@ function consumeParams() {
   let candidate = number;
   let minedFromText = false;
   if (!candidate && text) {
-    // Share-target flow: mine any phone-like token out of the shared text.
     const m = text.match(/\+?\d[\d\s\-().]{6,18}\d/);
     if (m) {
       candidate = m[0];
@@ -746,13 +1034,11 @@ function consumeParams() {
       setNational(candidate);
     }
   }
-  // The message applies for explicit deep links (?number=&text=) and for
-  // shared plain text — but not when the shared text itself WAS the number.
   if (text && !minedFromText) {
     state.message = text.slice(0, 300);
     msgInput.value = state.message;
     $('#messageRow').classList.add('open');
-    msgToggle.textContent = '− Message';
+    msgToggle.textContent = t('removeMessage');
   }
   if (app && getApp(app)) {
     state.defaultApp = app;
@@ -771,9 +1057,9 @@ function registerServiceWorker() {
           const worker = reg.installing;
           worker?.addEventListener('statechange', () => {
             if (worker.state === 'installed' && navigator.serviceWorker.controller) {
-              toast('A new version is ready', {
+              toast(t('updateReady'), {
                 kind: 'good',
-                actionLabel: 'Refresh',
+                actionLabel: t('refresh'),
                 timeout: 12000,
                 onAction: () => worker.postMessage({ type: 'SKIP_WAITING' }),
               });
@@ -781,11 +1067,9 @@ function registerServiceWorker() {
           });
         });
       })
-      .catch(() => toast('Offline support failed to install', { kind: 'warn' }));
+      .catch(() => toast(t('offlineFail'), { kind: 'warn' }));
   });
 
-  // Reload only when an UPDATED worker takes over — not on the very first
-  // install, where claim() fires controllerchange and a reload would flash.
   const hadController = !!navigator.serviceWorker.controller;
   let reloaded = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
@@ -807,7 +1091,7 @@ $('#installBtn').addEventListener('click', async () => {
   const { outcome } = await deferredInstall.userChoice;
   if (outcome === 'accepted') {
     $('#installBtn').hidden = true;
-    toast('Installed! Check your home screen', { kind: 'good' });
+    toast(t('installed'), { kind: 'good' });
   }
   deferredInstall = null;
 });
@@ -820,6 +1104,8 @@ window.addEventListener('appinstalled', () => {
 function init() {
   if (!storageOk) warnStorageOnce();
   applyTheme();
+  applyAccent();
+  applyStaticTranslations();
   systemDark.addEventListener('change', () => {
     if (settings.theme === 'system') applyTheme();
   });

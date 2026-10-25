@@ -105,6 +105,18 @@ test('rename is clamped to 40 chars', () => {
   assert.equal(h.list()[0].label.length, 40);
 });
 
+test('notes are stored, clamped to 80 chars, and cleared independently', () => {
+  const h = createHistory(new FakeStorage());
+  h.add(N1);
+  h.setNote(N1, 'plumber — quoted 2k');
+  assert.equal(h.list()[0].note, 'plumber — quoted 2k');
+  h.setNote(N1, 'y'.repeat(200));
+  assert.equal(h.list()[0].note.length, 80);
+  h.setNote(N2, 'other');
+  assert.equal(h.list().length, 1, 'note does not create entries');
+  assert.equal(h.list()[0].e164, N1);
+});
+
 test('persisted across instances through the same storage', () => {
   const s = new FakeStorage();
   createHistory(s).add(N1);

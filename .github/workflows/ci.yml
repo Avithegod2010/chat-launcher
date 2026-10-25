@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dev tooling
+        run: npm ci
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Adversarial bug-hunt (headless Chromium)
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+        run: |
+          node tools/serve.mjs &
+          sleep 2
+          node tools/bug-hunt.mjs
+
+      - name: Ensure site assets resolve
+        run: |
+          for p in "" css/app.css js/main.js js/i18n.js js/stats.js js/qr.js js/vendor/qrcode-generator.js \
+                   manifest.webmanifest sw.js icons/icon-192.png; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:8143/$p")
+            [ "$code" = "200" ] || { echo "MISSING /$p ($code)"; exit 1; }
+          done

@@ -2,7 +2,7 @@
  * Pure phone-number helpers. No DOM access — everything here is unit-tested
  * under Node (tests/phone.test.js).
  */
-import { matchDialCode, primaryCountryForDial } from './countries.js';
+import { matchDialCode, nationalLengthRange, primaryCountryForDial } from './countries.js';
 
 /**
  * Strip everything except digits.
@@ -46,6 +46,39 @@ export function toE164(dial, national, opts = {}) {
  */
 export function isValid(e164) {
   return /^[1-9]\d{6,14}$/.test(e164 ?? '');
+}
+
+/**
+ * Country-aware validation: checks the national number length against the
+ * selected country's numbering plan when we know it, falling back to the
+ * generic ITU rule.
+ *
+ * @param {string} dial country calling code in use
+ * @param {string} national national digits as typed
+ * @param {string} [iso] country ISO code (enables per-country rules)
+ * @returns {{state: 'empty'|'ok'|'short'|'long'|'bad', e164: string|null,
+ *            typed: number, min: number, max: number}}
+ *  `bad` = generic invalid (leading zero, bad chars, outside 7–15 total).
+ */
+export function checkNumber(dial, national, iso) {
+  const range = nationalLengthRange(iso, digitsOnly(dial));
+  const typed = digitsOnly(national).length;
+  if (!typed) return { state: 'empty', e164: null, typed: 0, min: range?.[0] ?? 7, max: range?.[1] ?? 15 };
+  const e164 = toE164(dial, national, { iso });
+  const genericOk = !!e164 && isValid(e164);
+  if (range) {
+    const [min, max] = range;
+    if (typed < min) return { state: 'short', e164, typed, min, max };
+    if (typed > max) return { state: 'long', e164, typed, min, max };
+    return genericOk
+      ? { state: 'ok', e164, typed, min, max }
+      : { state: 'bad', e164, typed, min, max };
+  }
+  if (genericOk) return { state: 'ok', e164, typed, min: 7, max: 15 };
+  // Still forming a plausible generic number vs definitely broken.
+  return typed + digitsOnly(dial).length <= 15
+    ? { state: 'short', e164, typed, min: 7, max: 15 }
+    : { state: 'long', e164, typed, min: 7, max: 15 };
 }
 
 /**

@@ -20,15 +20,21 @@ Every messenger hides chat-by-number behind the same dance: save the contact, re
 - 🚀 **9 launch targets** — WhatsApp, Telegram, Signal, SMS, Phone call, Viber, Skype, LINE, Threema
 - 🌍 **Country picker** with ~230 dial codes and emoji flags; your choice is remembered
 - 🧠 **Smart paste** — `+44 20 7946 0958`, `0049…`, `+1 (555) …` are parsed and matched to the country by longest prefix
+- 🎯 **Per-country validation** — live feedback against each country's real numbering-plan lengths (India = 10 digits, Singapore = 8, …), not just a generic 7–15 rule
 - ✍️ **Preset message** — pre-fill text where the platform supports it (WhatsApp, SMS)
-- 🕘 **History** — recent numbers with usage counts, pin favourites, rename, one-tap refill
+- 🕘 **History** — recent numbers with usage counts, pin favourites, rename, and free-text notes ("plumber — quoted 2k")
+- 📷 **QR share** — scannable code for the current number, so desktop → phone handoff is one scan
+- 🧨 **Bulk launch** — paste a list of numbers, open them one by one or all at once (great for marketplace sellers)
+- 💬 **Open in the native app** — on desktop, right-click the WhatsApp/Telegram tile to launch the installed client instead of the web
 - ⌨️ **Dial-pad mode** for one-handed touch input
 - ⌨️ **Keyboard shortcuts** — `Enter` launch, `Ctrl+1–9` app picker, `/` focus, `d` dial pad, `t` theme, `?` help
-- 🌗 **Dark / light / system theme** with animated transitions
-- 🧩 **Reorder, hide or show tiles** in settings
+- 🌗 **Dark / light / system theme** with animated transitions, plus 4 accent presets
+- 🌐 **English + हिन्दी** interface (auto-detected, switchable in settings)
+- 📊 **Local-only usage dashboard** — chats launched all-time and this month, top apps — computed entirely on-device
 - 📲 **Installable PWA** — service-worker precache, offline from second visit, update toast, share-target support (share a number from any app into Chat Launcher)
 - 🔗 **Deep links** — `?number=+15551234567&text=hi&app=whatsapp` opens pre-filled
 - ♿ **Accessible** — keyboard navigable, aria-live validation, `prefers-reduced-motion` honoured
+- 🤖 **CI on every push** — 55 unit tests + 9 adversarial security probes + asset checks; tags build the Android APK on EAS and attach it to the release automatically
 
 ## Platform support
 
@@ -72,9 +78,11 @@ Requires only Node.js (any recent version). No build step, no dependencies.
 
 ```bash
 npm test                    # node --test tests/
+node tools/serve.mjs &      # then, optionally:
+node tools/bug-hunt.mjs     # adversarial probes against a real browser
 ```
 
-39 unit tests cover phone-number normalization (E.164, trunk zeros, paste parsing), every platform's deep-link shape, exactly-once message encoding, and history behaviour (dedup, pinning, capacity, corrupt-JSON recovery).
+55 unit tests cover phone-number normalization (E.164, trunk zeros, paste parsing, per-country lengths), every platform's deep-link shape, exactly-once message encoding, history behaviour (dedup, pinning, notes, capacity, corrupt-JSON recovery), stats aggregation, and i18n completeness. 9 adversarial probes drive the real app headless with hostile inputs (XSS payloads, poisoned localStorage, CSP violations).
 
 ## Tech notes
 

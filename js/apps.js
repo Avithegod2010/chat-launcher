@@ -28,6 +28,11 @@ export function isAppleDevice(userAgent = typeof navigator !== 'undefined' ? nav
   return /iPhone|iPad|iPod|Macintosh/i.test(userAgent);
 }
 
+/** Probably a desktop without touch — used to offer app-scheme launches. */
+export function isDesktopUA(userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : '') {
+  return !/Android|iPhone|iPad|iPod|Mobile/i.test(userAgent);
+}
+
 /**
  * @typedef {{id: string, name: string, color: string, capability: 'full'|'limited',
  *            supportsMessage: boolean, note?: string,
@@ -48,6 +53,10 @@ export const APPS = [
       message
         ? `https://wa.me/${e164}?text=${encodeURIComponent(message)}`
         : `https://wa.me/${e164}`,
+    /** Native scheme for the desktop/mobile WhatsApp client. */
+    appScheme: (e164, message) =>
+      `whatsapp://send?phone=${encodeURIComponent(plus(e164))}` +
+      (message ? `&text=${encodeURIComponent(message)}` : ''),
   },
   {
     id: 'telegram',
@@ -56,6 +65,7 @@ export const APPS = [
     capability: 'full',
     supportsMessage: false,
     icon: brand('telegram'),
+    appScheme: (e164) => `tg://resolve?phone=${plus(e164)}`,
     buildUrl: (e164) => `https://t.me/${plus(e164)}`,
   },
   {

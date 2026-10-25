@@ -1,0 +1,53 @@
+name: Release (APK via EAS)
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  android-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Build APK on EAS
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          npm install -g eas-cli
+          cd expo-app
+          eas build --platform android --profile preview --non-interactive --no-wait --json > build.json
+          BUILD_ID=$(node -e "const j=require('./build.json');console.log(Array.isArray(j)?j[0].id:j.id)")
+          echo "BUILD_ID=$BUILD_ID" >> "$GITHUB_ENV"
+
+      - name: Wait for the build and download the APK
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          cd expo-app
+          for i in $(seq 1 60); do
+            STATUS=$(eas build:view "$BUILD_ID" --json | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>console.log(JSON.parse(d).status))")
+            echo "poll $i: $STATUS"
+            case "$STATUS" in
+              FINISHED) break ;;
+              ERRORED|CANCELED) echo "EAS build $STATUS"; exit 1 ;;
+            esac
+            sleep 30
+          done
+          eas build:view "$BUILD_ID" --json | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>console.log(JSON.parse(d).artifacts.buildUrl))" > apk-url.txt
+          curl -sL -o app-release.apk "$(cat apk-url.txt)"
+          ls -la app-release.apk
+
+      - name: Attach APK to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          gh release upload "$TAG" expo-app/app-release.apk --clobber

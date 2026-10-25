@@ -12,10 +12,11 @@ const OUT = join(ROOT, 'screenshots');
 mkdirSync(OUT, { recursive: true });
 
 const EDGE = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
+const BROWSER_PATH = process.env.CHROME_PATH || EDGE;
 const BASE = 'http://127.0.0.1:8143/';
 
 const browser = await puppeteer.launch({
-  executablePath: EDGE,
+  executablePath: BROWSER_PATH,
   headless: 'new',
   args: ['--no-sandbox', '--disable-gpu', '--hide-scrollbars'],
 });

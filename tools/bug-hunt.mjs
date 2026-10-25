@@ -5,6 +5,8 @@
 import puppeteer from 'puppeteer-core';
 
 const EDGE = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
+// CI (Linux) passes CHROME_PATH; locally we default to Edge on Windows.
+const BROWSER_PATH = process.env.CHROME_PATH || EDGE;
 const BASE = 'http://127.0.0.1:8143/';
 const results = [];
 
@@ -14,7 +16,7 @@ function record(name, pass, detail = '') {
 }
 
 const browser = await puppeteer.launch({
-  executablePath: EDGE,
+  executablePath: BROWSER_PATH,
   headless: 'new',
   args: ['--no-sandbox', '--disable-gpu'],
 });

@@ -285,10 +285,43 @@ export function primaryCountryForDial(dial) {
 }
 
 /**
- * Longest-prefix match of a digit string against known dial codes.
- * @param {string} digits digit-only string, may start with the country code
- * @returns {string|null} the matched dial code, or null
+ * Expected national (significant) number length per country, [min, max].
+ * Sources: ITU-T E.164 national numbering plans. Countries not listed fall
+ * back to the ITU generic 7–15 total-digit rule in phone.js. NANP entries
+ * with 4-digit dial prefixes (e.g. '1242' Bahamas) expect 7 more digits;
+ * plain '1' (US/Canada) expects 10.
  */
+const LENGTHS = {
+  IN: [10, 10], US: [10, 10], CA: [10, 10],
+  GB: [9, 10], IE: [9, 9], DE: [10, 11], FR: [9, 9], ES: [9, 9],
+  IT: [9, 10], PT: [9, 9], NL: [9, 9], BE: [8, 9], CH: [9, 9],
+  AT: [10, 11], SE: [7, 9], NO: [8, 8], DK: [8, 8], FI: [9, 10],
+  PL: [9, 9], CZ: [9, 9], SK: [9, 9], HU: [9, 9], RO: [9, 9],
+  BG: [9, 9], GR: [10, 10], HR: [9, 9], RS: [9, 9], UA: [9, 9],
+  RU: [10, 10], KZ: [10, 10], UZ: [9, 9],
+  CN: [11, 11], JP: [10, 11], KR: [9, 10], TW: [9, 9], HK: [8, 8],
+  SG: [8, 8], MY: [9, 10], TH: [9, 9], VN: [10, 10], PH: [10, 10],
+  ID: [10, 12], PK: [10, 10], BD: [10, 10], LK: [9, 10], NP: [10, 10],
+  AE: [9, 9], SA: [9, 9], QA: [8, 8], KW: [8, 8], OM: [8, 8],
+  BH: [8, 8], IL: [9, 9], TR: [10, 10],
+  AU: [9, 9], NZ: [8, 10],
+  BR: [10, 11], AR: [10, 10], CL: [9, 9], CO: [10, 10], PE: [9, 9],
+  VE: [10, 10], MX: [10, 10],
+  EG: [10, 10], MA: [9, 9], DZ: [9, 9], TN: [8, 8], LY: [9, 10],
+  NG: [10, 10], KE: [10, 10], GH: [9, 9], ZA: [9, 9], ET: [9, 9],
+  TZ: [9, 9], UG: [9, 9],
+};
+
+/**
+ * @param {string} iso
+ * @param {string} dial the dial code actually in use (NANP area-aware)
+ * @returns {[number, number]|null}
+ */
+export function nationalLengthRange(iso, dial) {
+  if (dial === '1') return LENGTHS.US;
+  if (dial.length === 4 && dial.startsWith('1')) return [7, 7];
+  return LENGTHS[iso] ?? null;
+}
 export function matchDialCode(digits) {
   return DIAL_INDEX.find((d) => digits.startsWith(d) && digits.length > d.length) ?? null;
 }
