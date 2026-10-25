@@ -17,6 +17,11 @@ jobs:
         with:
           node-version: 24
 
+      - name: Install Expo dependencies (config plugins need them client-side)
+        run: |
+          cd expo-app
+          npm ci --no-fund --no-audit
+
       - name: Build APK on EAS
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
