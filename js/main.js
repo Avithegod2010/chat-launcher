@@ -20,7 +20,7 @@ import {
   warnStorageOnce,
 } from './ui.js';
 
-const APP_VERSION = '1.0.0';
+const APP_VERSION = '1.1.0';
 const SETTINGS_KEY = 'chatlauncher:settings';
 const $ = (sel) => document.querySelector(sel);
 

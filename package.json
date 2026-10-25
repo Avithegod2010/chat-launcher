@@ -1,6 +1,6 @@
 {
   "name": "chat-launcher",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Open any phone number's chat in WhatsApp, Telegram, Signal and more - instantly. A zero-dependency, offline-first PWA.",
   "private": true,
   "type": "module",
