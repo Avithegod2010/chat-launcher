@@ -27,7 +27,20 @@
   <header class="site-header">
     <div class="site-header-inner">
       <div class="brand">
-        <img class="brand-icon" src="./icons/icon.svg" alt="" width="27" height="27">
+        <!-- Inlined icons/icon.svg: the real app artwork, no extra request. -->
+        <svg class="brand-icon" viewBox="0 0 512 512" aria-hidden="true">
+          <defs>
+            <linearGradient id="brandGrad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#4f46e5"/>
+              <stop offset="1" stop-color="#7c3aed"/>
+            </linearGradient>
+          </defs>
+          <rect width="512" height="512" rx="113" fill="url(#brandGrad)"/>
+          <path d="M256 116c-77 0-139 53-139 119 0 37 19 70 49 92l-16 51 66-24c13 3.5 26.5 5 40 5 77 0 139-53 139-124 0-66-62-119-139-119Z" fill="#fff"/>
+          <circle cx="202" cy="235" r="17" fill="#5a4ce8"/>
+          <circle cx="256" cy="235" r="17" fill="#5a4ce8"/>
+          <circle cx="310" cy="235" r="17" fill="#5a4ce8"/>
+        </svg>
         <span class="wordmark">Chat Launcher</span>
       </div>
       <div class="header-actions">
