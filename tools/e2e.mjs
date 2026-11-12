@@ -32,6 +32,9 @@ async function fresh(url = BASE) {
   const page = await browser.newPage();
   page.on('dialog', (d) => d.dismiss());
   await page.setViewport({ width: 1100, height: 900 });
+  // Deterministic journeys: View Transitions otherwise make style flips
+  // asynchronous (computed styles lag one frame behind the DOM attributes).
+  await page.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20000 });
   await page.waitForSelector('.tile[data-app="whatsapp"]', { timeout: 15000 });
   // Hard reset app state between journeys (shared browser context).
@@ -387,14 +390,22 @@ try {
 try {
   const page = await fresh();
   await page.click('#settingsOpen');
-  await page.click('#textGroup input[value="large"]');
-  await page.click('#contrastToggle');
-  await sleep(250);
-  const attrs = await page.evaluate(() => ({
-    text: document.documentElement.dataset.text,
-    contrast: document.documentElement.dataset.contrast,
-    rootFont: getComputedStyle(document.documentElement).fontSize,
-  }));
+  // programmatic clicks — the View Transition can shift layout under the cursor
+  await page.evaluate(() => {
+    document.querySelector('#textGroup input[value="large"]').click();
+    document.getElementById('contrastToggle').click();
+  });
+  await sleep(150);
+  const attrs = await page.evaluate(async () => {
+    const target = { text: document.documentElement.dataset.text, contrast: document.documentElement.dataset.contrast, rootFont: '' };
+    // font-size application can lag the DOM attribute by a frame in headless
+    for (let i = 0; i < 30; i++) {
+      target.rootFont = getComputedStyle(document.documentElement).fontSize;
+      if (parseFloat(target.rootFont) >= 17) break;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    return target;
+  });
   await page.keyboard.press('Escape');
   check(
     'a11y',
