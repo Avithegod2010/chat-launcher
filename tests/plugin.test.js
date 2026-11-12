@@ -18,7 +18,7 @@ test('shortcuts.xml references string resources, never literals', () => {
   // No raw label text directly in the attribute values.
   assert.ok(!/shortcutShortLabel="[^@]/.test(xml), 'no literal short labels');
   assert.ok(!/shortcutLongLabel="[^@]/.test(xml), 'no literal long labels');
-  assert.equal((xml.match(/<shortcut /g) || []).length, plugin.SHORTCUTS.length);
+  assert.equal((xml.match(/<shortcut\s/g) || []).length, plugin.SHORTCUTS.length);
 });
 
 test('label resources exist for every shortcut', () => {
