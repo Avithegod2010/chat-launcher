@@ -14,14 +14,18 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 /** @type {{path: string, budget: number, label: string}[]} */
 const BUDGETS = [
-  { path: 'index.html', budget: 22 * 1024, label: 'HTML' },
-  { path: 'css/app.css', budget: 40 * 1024, label: 'CSS' },
-  { path: 'js/main.js', budget: 55 * 1024, label: 'main JS' },
+  { path: 'index.html', budget: 30 * 1024, label: 'HTML' },
+  { path: 'css/app.css', budget: 52 * 1024, label: 'CSS' },
+  { path: 'js/main.js', budget: 78 * 1024, label: 'main JS' },
   { path: 'js/countries.js', budget: 20 * 1024, label: 'countries data' },
-  { path: 'js/i18n.js', budget: 60 * 1024, label: 'i18n tables (7 langs)' },
+  { path: 'js/i18n.js', budget: 112 * 1024, label: 'i18n tables (12 langs)' },
+  { path: 'js/templates.js', budget: 6 * 1024, label: 'templates' },
+  { path: 'js/lists.js', budget: 8 * 1024, label: 'broadcast lists' },
+  { path: 'js/suggest.js', budget: 4 * 1024, label: 'suggestion engine' },
+  { path: 'js/sync.js', budget: 9 * 1024, label: 'e2e sync' },
   { path: 'js/vendor/qrcode-generator.js', budget: 60 * 1024, label: 'vendored QR' },
   { path: 'manifest.webmanifest', budget: 4 * 1024, label: 'manifest' },
-  { path: 'sw.js', budget: 5 * 1024, label: 'service worker' },
+  { path: 'sw.js', budget: 6 * 1024, label: 'service worker' },
 ];
 
 let failed = 0;
@@ -50,7 +54,7 @@ for (const f of new Set(files)) {
     failed++;
   }
 }
-const TOTAL_BUDGET = 400 * 1024;
+const TOTAL_BUDGET = 520 * 1024;
 const totalOk = precacheTotal <= TOTAL_BUDGET;
 if (!totalOk) failed++;
 console.log(

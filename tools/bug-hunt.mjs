@@ -183,6 +183,72 @@ async function freshPage() {
   await page.close();
 }
 
+/* 8 — hostile history labels cannot inject through the command palette */
+{
+  const page = await freshPage();
+  await page.goto(BASE, { waitUntil: 'networkidle0' });
+  await page.evaluate(() => {
+    localStorage.setItem(
+      'chatlauncher:history',
+      JSON.stringify([
+        {
+          e164: '15551234567',
+          label: '<img src=x onerror=window.__xss=1>',
+          count: 2,
+          lastUsed: 1,
+          pinned: false,
+        },
+      ]),
+    );
+  });
+  await page.reload({ waitUntil: 'networkidle0' });
+  await page.keyboard.down('Control');
+  await page.keyboard.press('k');
+  await page.keyboard.up('Control');
+  await new Promise((r) => setTimeout(r, 400));
+  await page.type('#paletteInput', 'img');
+  await new Promise((r) => setTimeout(r, 300));
+  const r = await page.evaluate(() => ({
+    xss: window.__xss ?? 'clean',
+    imgs: document.querySelectorAll('#paletteList img').length,
+    textItems: document.querySelectorAll('#paletteList .palette-item').length,
+  }));
+  record('palette renders hostile labels as text (no injection)', r.xss === 'clean' && r.imgs === 0, JSON.stringify(r));
+  await page.close();
+}
+
+/* 9 — shell bridge floods: hostile postMessage shapes cannot break the app */
+{
+  const page = await freshPage();
+  await page.goto(BASE, { waitUntil: 'networkidle0' });
+  const r = await page.evaluate(() => {
+    window.ReactNativeWebView = { postMessage: () => {} };
+    const send = (data) =>
+      window.dispatchEvent(new MessageEvent('message', { data }));
+    const attacks = [
+      'not json at all',
+      JSON.stringify({ type: 'chatlauncher-contact', number: '<img src=x onerror=1>' }),
+      JSON.stringify({ type: 'chatlauncher-contact', number: '+'.repeat(5000) }),
+      JSON.stringify({ type: 'chatlauncher-contact', number: '15551234567', avatar: 'javascript:alert(1)', name: '<svg onload=alert(1)>' }),
+      JSON.stringify({ type: 'chatlauncher-share', text: 'x'.repeat(1e6) }),
+      JSON.stringify({ type: 'chatlauncher-schedule', seconds: -5, number: null, url: 'javascript:alert(1)' }),
+      { type: 'chatlauncher-contact', __proto__: { polluted: 'yes' } },
+    ];
+    for (const a of attacks) send(a);
+    return {
+      polluted: ({}).polluted ?? 'clean',
+      tiles: document.querySelectorAll('.tile').length,
+      value: document.getElementById('phone').value,
+    };
+  });
+  record(
+    'shell bridge floods are inert (proto clean, app alive)',
+    r.polluted === 'clean' && r.tiles === 9,
+    JSON.stringify({ polluted: r.polluted, tiles: r.tiles, len: r.value.length }),
+  );
+  await page.close();
+}
+
 await browser.close();
 
 const failed = results.filter((r) => !r.pass);

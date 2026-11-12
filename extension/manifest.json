@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "Chat Launcher",
+  "version": "2.0.0",
+  "description": "Select or right-click any phone number to open its chat in WhatsApp, Telegram, Signal and more — powered by Chat Launcher.",
+  "homepage_url": "https://avithegod2010.github.io/chat-launcher/",
+  "icons": {
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "permissions": ["contextMenus", "storage"],
+  "host_permissions": [],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "Open Chat Launcher",
+    "default_icon": {
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": false
+  }
+}

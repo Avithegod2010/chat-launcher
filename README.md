@@ -21,25 +21,29 @@ Every messenger hides chat-by-number behind the same dance: save the contact, re
 - 🌍 **Country picker** with ~230 dial codes and emoji flags; your choice is remembered
 - 🧠 **Smart paste** — `+44 20 7946 0958`, `0049…`, `+1 (555) …` are parsed and matched to the country by longest prefix
 - 🎯 **Country-aware formatting & validation** — numbers group as each country writes them (`98765 43210` in India, `555 123 4567` in the US) and are checked against the real numbering-plan length; unusual lengths ask before launching
-- ✍️ **Preset message** — pre-fill text where the platform supports it (WhatsApp, SMS)
-- 🕘 **History** — usage counts, pins, rename, free-text notes, per-entry default messenger, and search (number, label, note or app name)
-- 📇 **Contact import** — a native picker in the Android shell, plus `.vcf` file import with drag & drop on desktop
-- 📷 **QR share** — scannable code for the current number, so desktop → phone handoff is one scan
+- ✍️ **Preset message & templates** — pre-fill text, or keep reusable templates with `{name} {number} {app} {date} {time}` variables
+- 🕘 **History** — usage counts, pins, rename, free-text notes, **contact avatars**, per-entry default messenger, and search (number, label, note or app name)
+- ✦ **Smart suggestion** — the tile you'd most likely use is highlighted from per-number history, global usage and time-of-day
+- 📷 **QR share + scanner** — generate a code for the current number, or scan a QR/MeCard/barcode with the camera to fill it in
+- 📢 **Broadcast lists** — named groups of numbers, CSV import/export, launch the whole list on any target
 - 🧨 **Bulk launch** — paste a list of numbers, open them one by one or all at once
-- 📦 **Backup & restore** — export/import history, settings and stats as a validated JSON file
+- 🔐 **End-to-end encrypted sync** — one passphrase → AES-GCM; push/pull to *your own* WebDAV server (Nextcloud works); the server only ever sees ciphertext
+- ⌨️ **Command palette** — `Ctrl/⌘+K` for every action: launch apps, switch language/theme, run history entries
+- ⏰ **Scheduled chats** (Android shell) — a notification at your chosen time opens the chat
 - 📴 **Offline queue** — numbers shared in while offline wait for connectivity, then launch with one tap
 - 💬 **Open in the native app** — on desktop, right-click the WhatsApp/Telegram tile to launch the installed client instead of the web
 - ⌨️ **Dial-pad mode** and **keyboard shortcuts** — `Enter` launch, `Ctrl+1–9` app picker, `/` focus, `d` dial pad, `t` theme, `?` help
-- 🌗 **Dark / light / system theme**, four accent presets plus a custom color picker
-- 🌐 **Seven UI languages** — English, हिन्दी, Español, العربية (RTL), मराठी, বাংলা, தமிழ்
+- 🌗 **Dark / light / system theme**, four accent presets, custom color picker, **large-text mode** and **high-contrast surfaces**
+- 🌐 **Twelve UI languages** — English, हिन्दी, Español, العربية (RTL), मराठी, বাংলা, தமிழ், Deutsch, Français, Português, Русский, 日本語
 - 📊 **Local-only usage dashboard** — chats launched all-time and this month, top apps, on-device only
 - 🛟 **Error boundary** — unexpected failures surface a toast with a reload action instead of a dead page
 - 📲 **Installable PWA** — service-worker precache, offline from second visit, update toast, share-target support
 - 🔗 **Deep links** — `?number=+15551234567&text=hi&app=whatsapp` opens pre-filled
-- 🤖 **Android shell extras** — contact picker and history-driven dynamic launcher shortcuts
-- 🖥️ **Desktop shell** — Tauri scaffold (`desktop/`) with a global-hotkey launcher window
-- ♿ **Accessible** — labeled dialogs, keyboard navigable, aria-live validation, `prefers-reduced-motion` honoured
-- 🧪 **Verified on every push** — 71 unit/property tests, 9 adversarial security probes, 11 e2e journeys, bundle-size budget, F-Droid metadata lint, Lighthouse budget
+- 🤖 **Android shell extras** — contact picker (with photos), history-driven launcher shortcuts, **home-screen widget**, **Quick Settings tile**, **share-in from any app**, scheduled-chat notifications
+- 🧩 **Browser extension** (`extension/`) — select or right-click any number on any page to launch it
+- 🖥️ **Desktop shell** — Tauri app (`desktop/`) with global hotkey, **tray icon** and a **clipboard watcher** (copy a number anywhere → launcher opens)
+- ♿ **Accessible** — labeled dialogs, keyboard navigable, aria-live validation, `prefers-reduced-motion` honoured, motion tokens + View Transitions
+- 🧪 **Verified on every push** — 104 unit/property tests, 11 adversarial security probes, 17 e2e journeys, bundle-size budget, F-Droid metadata lint, Lighthouse budget
 
 ## Platform support
 
@@ -59,9 +63,10 @@ Every messenger hides chat-by-number behind the same dance: save the contact, re
 
 ## Privacy
 
-- **No network requests after load.** The app is a static shell; the only outbound navigation is the deep link you tap.
-- **No accounts, no analytics, no tracking** — enforced by the Content-Security-Policy (`connect-src 'none'`).
+- **No network requests after load** — until *you* configure sync. The CSP allows outbound requests only to https endpoints, and the app itself fetches nothing.
+- **No accounts, no analytics, no tracking.**
 - **All data stays on your device** in `localStorage` (history, settings). "Wipe all local data" in settings removes everything.
+- **Sync is zero-knowledge**: your passphrase derives the AES-GCM key on-device (PBKDF2, 310k iterations); the WebDAV server only ever stores ciphertext. WebDAV credentials are stored locally in `localStorage` — use an app password.
 - Referrer is stripped (`no-referrer`) so chat targets don't learn you came from Chat Launcher.
 
 ## Install as an app
@@ -90,7 +95,7 @@ node tools/bundle-budget.mjs
 node tools/fdroid-lint.mjs
 ```
 
-71 tests cover phone normalization (E.164, trunk zeros, paste parsing, per-country lengths and grouping), every platform's deep-link shape, exactly-once message encoding, history (dedup, pins, notes, last-app, capacity, corrupt-JSON recovery), stats, backups (round-trip + hostile imports), vCard parsing, the offline queue, color math, and i18n completeness across all seven languages — plus seeded property tests that fuzz ~1,700 generated inputs. 9 adversarial probes drive the app with hostile inputs (XSS payloads, poisoned storage, CSP checks); 11 e2e journeys exercise launch, search, i18n/RTL, export/import, contact import, the unusual-length confirm and dialog accessibility.
+104 tests cover phone normalization (E.164, trunk zeros, paste parsing, per-country lengths and grouping), every platform's deep-link shape, exactly-once message encoding, history (dedup, pins, notes, last-app, capacity, corrupt-JSON recovery), stats (incl. hour-of-day buckets), backups (round-trip + hostile imports), vCard parsing, the offline queue, color math, **message templates, broadcast lists + CSV, the suggestion engine, the E2E sync crypto (round-trip, tamper, wrong passphrase, WebDAV stubs), and i18n completeness across all twelve languages** — plus seeded property tests that fuzz ~1,700 generated inputs. 11 adversarial probes drive the app with hostile inputs (XSS payloads, poisoned storage, CSP checks, hostile palette labels, shell-bridge message floods); 17 e2e journeys exercise launch, search, i18n/RTL, export/import, contact import, the unusual-length confirm, dialog accessibility, the command palette, templates, broadcast lists, the scanner, large-text/contrast modes and the suggestion badge.
 
 ## Repo layout
 
@@ -98,17 +103,19 @@ node tools/fdroid-lint.mjs
 |---|---|
 | `js/`, `css/`, `index.html` | the PWA — everything ships from the repo root (GitHub Pages) |
 | `tests/` | unit + property tests (`node --test`) |
-| `tools/` | dev tooling: server, screenshots, bug-hunt, e2e, budgets, f-droid lint |
-| `expo-app/` | Android shell (Expo): WebView host, contact picker, dynamic shortcuts |
-| `desktop/` | Tauri desktop shell scaffold (global hotkey launcher) |
+| `tools/` | dev tooling: server, screenshots, bug-hunt, e2e, budgets, f-droid lint, extension packer |
+| `expo-app/` | Android shell (Expo): WebView host, contact picker, shortcuts, widget, tile, share-in, scheduled notifications |
+| `extension/` | browser extension (MV3): selection pill + context-menu launcher |
+| `desktop/` | Tauri desktop shell: global hotkey, tray, clipboard watcher |
+| `fastlane/` | Play Store upload lanes + store metadata |
 | `fdroid/` | F-Droid metadata + submission notes |
 | `docs/` | security audit report |
 
 ## Tech notes
 
 - **Zero dependencies, zero build** — vanilla ES modules; icons are generated PNGs/SVG committed to the repo (`node tools/gen-icons.mjs` regenerates them)
-- **CSP-hardened** — `script-src 'self'`, `connect-src 'none'`, `form-action 'none'`
-- **60 fps animations** — transforms/opacity only; drifting gradient orbs, staggered tiles, ripple ink, particle burst
+- **CSP-hardened** — `script-src 'self'`, `form-action 'none'`; `connect-src 'self' https:` exists *only* so the optional, user-configured sync can reach your own server — the app itself still fetches nothing
+- **60 fps animations** — motion tokens drive transforms/opacity only; drifting gradient orbs, staggered tiles, ripple ink, particle burst, View Transitions on theme/language changes
 - Numbers are normalized to [E.164](https://www.itu.int/rec/T-REC-E.164) before link construction; see [CONTEXT.md](CONTEXT.md) for the domain vocabulary
 - **Android shell** (`expo-app/`) is a minimal React Native WebView container built with EAS — it contributes no UI of its own, only a floating contact-picker button and history-driven launcher shortcuts
 - **Desktop shell** (`desktop/`) is a Tauri v2 window with a `Ctrl+Shift+C` global hotkey; build it with the Rust toolchain (see `desktop/README.md`)

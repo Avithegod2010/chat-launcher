@@ -253,3 +253,72 @@ claims — PASS (no network APIs added).
 Threema cannot open a chat by phone number (platform restriction, labeled
 "app only"); iOS SMS body separators are sniffed by user-agent, which is
 best-effort by nature.
+
+---
+
+# v2.0 addendum (2026-11-13)
+
+Q&A review of the v2.0 feature set.
+
+## Q1. The CSP was relaxed from `connect-src 'none'` to `'self' https:` — does that break the "no tracking" guarantee?
+
+**Verdict: PASS with documented trade-off.**
+- The app itself still issues **zero** fetch/XHR/WebSocket calls; `grep -rn "fetch(" js/` shows the only fetch call sites inside `js/sync.js`, which runs exclusively on user action (Push/Pull buttons) and only toward the user-configured URL.
+- `sync.assertSafeUrl` enforces **https** (plain http only for localhost), so sync traffic is always TLS-encrypted in transit — and GCM-encrypted in content regardless.
+- Worst case if a future dependency tried to beacon: it could reach an https endpoint. There are no runtime dependencies (the web app is vendored ES modules), so the attack surface is the repo itself. Mitigations: SBOM + provenance attestations on every release, Dependabot, and the adversarial CSP probe that fails CI on any `unsafe-inline`/violation.
+
+## Q2. The sync passphrase and WebDAV credentials live in localStorage — is that acceptable?
+
+**Verdict: PASS with documented limitation.**
+- The passphrase never leaves the device; the key is derived with PBKDF2-SHA256 (310k iterations, 16-byte random salt) and used as a non-extractable AES-GCM 256 key (`extractable: false`).
+- The stored WebDAV password is readable by anything that can execute JS in the page origin — i.e. nothing under our CSP (`script-src 'self'`), but a compromised browser profile could read it. Mitigation for users: an app-scoped password (documented in the README privacy section).
+- Sync merge paths (`mergeRemote`) never touch the network and re-validate the decrypted payload through the strict backup sanitizer before applying.
+
+## Q3. Is the sync envelope tamper-proof?
+
+**Verdict: PASS (probe-tested).**
+- AES-GCM authentication rejects wrong passphrases and any ciphertext/IV mutation (`tests/sync.test.js` covers both, plus foreign envelopes and cross-run salt uniqueness).
+- The envelope format field is checked before any crypto work; JSON.parse failures inside `pull` degrade to `{ok:false}` — never a throw into the UI (error boundary exists regardless).
+
+## Q4. The command palette renders user-controlled history labels — injection risk?
+
+**Verdict: PASS (probe-verified).**
+- All palette items are built with `document.createElement` + `textContent`; only `item.icon` (a fixed, repo-controlled SVG string) uses innerHTML. The new adversarial probe plants a history label of `<img src=x onerror=…>` and asserts no image element and no side effect.
+
+## Q5. The shell bridge now accepts more message types (share, schedule, contact+avatar). Hardening?
+
+**Verdict: PASS (probe-verified).**
+- Still gated on `window.ReactNativeWebView` presence (not forged from a normal browser).
+- Numbers: strict `+?\d{7,15}` before any parse; avatar: `data:image/(png|jpeg|webp);base64` regex + 12 KB cap, re-validated by `history.setAvatar` *and* on backup import; name: length-capped, rendered via textContent.
+- `chatlauncher-schedule` from the page goes to the shell, which clamps seconds to [60, 30 days]; the URL parameter is re-interpreted by the shell's own `isAppUrl` guard before navigation.
+- New adversarial probe floods the bridge with malformed/huge/proto-polluting messages: app stays alive, prototype clean.
+
+## Q6. Scheduled notifications — can a malicious "url" open something unexpected?
+
+**Verdict: PASS.**
+- The shell only schedules what the *page* (trusted origin, itself under strict CSP) asks for; on tap the shell re-runs `isAppUrl()` — anything outside `https://avithegod2010.github.io/chat-launcher*` is handed to the OS via `Linking.openURL` like any other external link. No credential or token is attached.
+
+## Q7. Browser extension — permission scope?
+
+**Verdict: PASS (minimal).**
+- Permissions: `contextMenus` + `storage` only — **no** `tabs` read, no host permissions, no `webRequest`. Content script listens to selection changes locally; the only cross-context message is the selected text sent to our own service worker.
+- The options page enforces https for the configurable endpoint; `openFor` builds a `?number=` URL with `encodeURIComponent`.
+
+## Q8. New native surfaces (widget, tile, share-in) — manifest risk?
+
+**Verdict: PASS.**
+- The widget receiver and tile service carry the minimum permissions (`BIND_REMOTEVIEWS`, `BIND_QUICK_SETTINGS_TILE`); the tile opens a fixed https URL via an immutable PendingIntent.
+- `expo-share-intent` adds `ACTION_SEND` mime filters for text; no data-scheme wildcard is introduced. All manifest edits go through reviewed config plugins that are unit-tested on their generated XML/Kotlin.
+
+## Verdict table (v2.0)
+
+| Area | Verdict |
+|---|---|
+| CSP relaxation rationale & blast radius | **PASS** (source-verified, documented) |
+| Sync crypto (KDF, GCM, tamper) | **PASS** (unit-tested) |
+| Sync merge path validation | **PASS** (unit-tested, sanitizer reuse) |
+| Command palette injection | **PASS** (probe-verified) |
+| Shell bridge v2 (share/schedule/avatar) | **PASS** (probe-verified) |
+| Notification tap navigation | **PASS** (source-verified) |
+| Extension permissions | **PASS** (minimal scope) |
+| Native surfaces (widget/tile/SEND) | **PASS** (minimal permissions, tested generators) |

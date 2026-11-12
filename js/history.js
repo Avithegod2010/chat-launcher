@@ -10,6 +10,14 @@
 
 const KEY = 'chatlauncher:history';
 const CAP = 50;
+/** Contact photo thumbnails ride along as small data URLs. */
+const AVATAR_RE = /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/;
+const AVATAR_CAP = 12000;
+
+/** @param {unknown} v @returns {string|undefined} validated avatar or undefined */
+function cleanAvatar(v) {
+  return typeof v === 'string' && v.length <= AVATAR_CAP && AVATAR_RE.test(v) ? v : undefined;
+}
 
 /**
  * @typedef {{getItem(k: string): string|null, setItem(k: string, v: string): void,
@@ -96,6 +104,23 @@ export function createHistory(storage) {
       const capped = enforceCap(entries);
       write(capped);
       return sorted(capped);
+    },
+
+    /**
+     * Attach (or clear, with null) a small contact photo for an entry.
+     * @param {string} e164
+     * @param {string|null} dataUrl validated data URL
+     */
+    setAvatar(e164, dataUrl) {
+      const entries = read() ?? [];
+      const e = entries.find((x) => x.e164 === e164);
+      if (e) {
+        const avatar = dataUrl == null ? undefined : cleanAvatar(dataUrl);
+        if (avatar) e.avatar = avatar;
+        else delete e.avatar;
+        write(entries);
+      }
+      return sorted(entries);
     },
 
     /** @returns {any[]} */
@@ -188,6 +213,7 @@ export function createHistory(storage) {
           lastUsed: Number(e.lastUsed) || 0,
           pinned: !!e.pinned,
           ...(typeof e.app === 'string' && /^[\w-]{1,24}$/.test(e.app) ? { app: e.app } : {}),
+          ...(cleanAvatar(e.avatar) ? { avatar: e.avatar } : {}),
         }))
         .slice(0, CAP);
       write(clean);

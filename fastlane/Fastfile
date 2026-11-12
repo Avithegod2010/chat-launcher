@@ -1,0 +1,45 @@
+# fastlane/Fastfile — Play Store lanes for Chat Launcher.
+# The AAB itself is built by EAS (`eas build --profile production`); these
+# lanes only upload. CI uses `eas submit` directly — these lanes are for
+# local, metadata-aware releases.
+
+default_platform(:android)
+
+platform :android do
+  desc "Push store metadata only (titles, descriptions, release notes)"
+  lane :metadata_only do
+    supply(
+      package_name: "io.github.avithegod2010.chatlauncher",
+      track: "production",
+      metadata_path: "fastlane/metadata/android",
+      skip_upload_apk: true,
+      skip_upload_aab: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+    )
+  end
+
+  desc "Upload the latest AAB to the internal testing track"
+  lane :internal do
+    aab = Dir.glob("#{__dir__}/../expo-app/*.aab").first
+    UI.user_error!("No .aab found in expo-app/ — run `eas build --profile production` first") unless aab
+    supply(
+      package_name: "io.github.avithegod2010.chatlauncher",
+      track: "internal",
+      aab: aab,
+      metadata_path: "fastlane/metadata/android",
+    )
+  end
+
+  desc "Upload the latest AAB to the production track"
+  lane :production do
+    aab = Dir.glob("#{__dir__}/../expo-app/*.aab").first
+    UI.user_error!("No .aab found in expo-app/ — run `eas build --profile production` first") unless aab
+    supply(
+      package_name: "io.github.avithegod2010.chatlauncher",
+      track: "production",
+      aab: aab,
+      metadata_path: "fastlane/metadata/android",
+    )
+  end
+end

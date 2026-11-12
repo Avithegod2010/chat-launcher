@@ -6,7 +6,7 @@
   <title>Chat Launcher — open any number in WhatsApp, Telegram, Signal &amp; more</title>
   <meta name="description" content="Type a phone number, tap an app, start chatting. Opens chats in WhatsApp, Telegram, Signal, SMS, Viber, Skype and more. No tracking, works offline, installable.">
   <meta name="referrer" content="no-referrer">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https:; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
   <meta name="theme-color" content="#0b1020">
   <meta property="og:title" content="Chat Launcher">
   <meta property="og:description" content="Type a phone number, tap an app, start chatting. WhatsApp, Telegram, Signal, SMS & more — no tracking, works offline.">
@@ -48,6 +48,9 @@
           <svg class="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4.4"/><path d="M12 2.5v2.4M12 19.1v2.4M2.5 12h2.4M19.1 12h2.4M5.2 5.2l1.7 1.7M17.1 17.1l1.7 1.7M18.8 5.2l-1.7 1.7M6.9 17.1l-1.7 1.7"/></svg>
           <svg class="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11Z"/></svg>
         </button>
+        <button id="paletteOpen" class="icon-btn ripple" type="button" aria-label="Command palette (Ctrl+K)" aria-keyshortcuts="Control+K Meta+K" title="Command palette (Ctrl+K)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m7 8 4 4-4 4M13 16h5"/></svg>
+        </button>
         <button id="helpOpen" class="icon-btn ripple" type="button" aria-label="Help and shortcuts (?)" title="Help (?)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M9 9.2a3.2 3.2 0 1 1 4.7 2.9c-1 .6-1.7 1.2-1.7 2.4"/><circle cx="12" cy="17.6" r="0.5" fill="currentColor" stroke="none"/></svg>
         </button>
@@ -78,6 +81,7 @@
         <button id="msgToggle" class="ghost-btn ripple" type="button" aria-expanded="false" data-i18n="addMessage">+ Message</button>
         <button id="padToggle" class="ghost-btn ripple" type="button" aria-expanded="false" aria-controls="dialPad" data-i18n="dialpad">⌨ Dial pad</button>
         <button id="qrBtn" class="ghost-btn ripple" type="button" data-i18n="qr">QR</button>
+        <button id="scanBtn" class="ghost-btn ripple" type="button" data-i18n="scan">📷 Scan</button>
         <button id="bulkBtn" class="ghost-btn ripple" type="button" data-i18n="bulk">☰ Bulk</button>
         <button id="copyBtn" class="ghost-btn ripple" type="button" data-i18n="copy">Copy</button>
       </div>
@@ -86,6 +90,7 @@
         <input id="message" type="text" maxlength="300" data-i18n-ph="messagePlaceholder" placeholder="Pre-filled message (WhatsApp & SMS)" aria-label="Pre-filled message">
         <span class="hint" data-i18n="messageHint">sent where supported</span>
       </div>
+      <div class="template-chips" id="templateChips" hidden></div>
 
       <div class="dial-pad" id="dialPad" aria-label="Dial pad">
         <button class="pad-key ripple" type="button" data-key="1">1</button>
@@ -133,6 +138,7 @@
   <div class="sheet-wrap" id="countrySheet" role="dialog" aria-label="Choose country" aria-modal="true">
     <div class="sheet-backdrop"></div>
     <div class="sheet">
+      <div class="sheet-grab" aria-hidden="true"></div>
       <div class="sheet-head">
         <h2>Choose country</h2>
         <button class="sheet-close" type="button" aria-label="Close">✕</button>
@@ -163,12 +169,48 @@
         <label><input type="radio" name="lang" value="mr"><span>मराठी</span></label>
         <label><input type="radio" name="lang" value="bn"><span>বাংলা</span></label>
         <label><input type="radio" name="lang" value="ta"><span>தமிழ்</span></label>
+        <label><input type="radio" name="lang" value="de"><span>Deutsch</span></label>
+        <label><input type="radio" name="lang" value="fr"><span>Français</span></label>
+        <label><input type="radio" name="lang" value="pt"><span>Português</span></label>
+        <label><input type="radio" name="lang" value="ru"><span>Русский</span></label>
+        <label><input type="radio" name="lang" value="ja"><span>日本語</span></label>
+      </div>
+      <div class="settings-label" data-i18n="textSize">Text size</div>
+      <div class="theme-group" id="textGroup" role="radiogroup" aria-label="Text size">
+        <label><input type="radio" name="textScale" value="normal"><span data-i18n="textNormal">Normal</span></label>
+        <label><input type="radio" name="textScale" value="large"><span data-i18n="textLarge">Large</span></label>
+      </div>
+      <div class="setting-row-inline">
+        <span data-i18n="highContrast">High-contrast surfaces</span>
+        <button id="contrastToggle" class="switch" type="button" role="switch" aria-checked="false" aria-label="High-contrast surfaces"></button>
       </div>
       <div class="settings-label" data-i18n="accent">Accent</div>
       <div class="accent-row" id="accentRow">
         <input type="color" id="accentCustom" class="accent-custom" data-i18n-aria="accentCustom" aria-label="Custom accent color">
       </div>
       <div id="tileSettings"></div>
+      <div class="settings-label" data-i18n="templatesLabel">Message templates</div>
+      <div class="manage-list" id="templateList"></div>
+      <div class="manage-actions">
+        <button id="templateNew" class="btn" type="button" data-i18n="templateNew">+ New template</button>
+      </div>
+      <div class="settings-label" data-i18n="listsLabel">Broadcast lists</div>
+      <div class="manage-list" id="listList"></div>
+      <div class="manage-actions">
+        <button id="listNew" class="btn" type="button" data-i18n="listNew">+ New list</button>
+      </div>
+      <div class="settings-label" data-i18n="syncLabel">Encrypted sync</div>
+      <div class="sync-grid">
+        <input id="syncUrl" class="text-input" type="url" inputmode="url" placeholder="https://cloud.example.com/remote.php/dav/files/me/chat-launcher.json" aria-label="WebDAV sync URL" autocomplete="off" spellcheck="false">
+        <input id="syncUser" class="text-input" type="text" placeholder="WebDAV username" aria-label="WebDAV username" autocomplete="off" spellcheck="false">
+        <input id="syncPass" class="text-input" type="password" placeholder="WebDAV password" aria-label="WebDAV password" autocomplete="off">
+        <input id="syncPhrase" class="text-input" type="password" placeholder="Encryption passphrase (never leaves this device)" aria-label="Encryption passphrase" autocomplete="off">
+      </div>
+      <p class="sync-status" id="syncStatus"></p>
+      <div class="manage-actions">
+        <button id="syncPush" class="btn" type="button" data-i18n="syncPush">Push (encrypt + upload)</button>
+        <button id="syncPull" class="btn" type="button" data-i18n="syncPull">Pull (download + merge)</button>
+      </div>
       <div class="settings-footer">
         <div class="settings-row">
           <button id="exportBtn" class="btn" type="button" data-i18n="backupExport">Export data</button>
@@ -237,6 +279,7 @@
         <tr><td><kbd>Enter</kbd></td><td data-i18n="helpEnter">Launch with the first (or highlighted) app</td></tr>
         <tr><td><kbd>Ctrl</kbd>+<kbd>1–9</kbd></td><td data-i18n="helpCtrl">Launch with the nth app tile</td></tr>
         <tr><td><kbd>t</kbd></td><td data-i18n="helpTheme">Switch theme</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>K</kbd></td><td data-i18n="helpPalette">Command palette</td></tr>
         <tr><td><kbd>d</kbd></td><td data-i18n="helpPad">Toggle the dial pad</td></tr>
         <tr><td><kbd>?</kbd></td><td data-i18n="helpHelp">This dialog</td></tr>
       </table>
@@ -253,6 +296,9 @@
     </div>
     <div class="dialog-body">
       <div class="app-pick-list"></div>
+      <div class="dialog-actions">
+        <button id="scheduleOpen" class="btn" type="button" data-i18n="scheduleOpen">⏰ Schedule this chat…</button>
+      </div>
     </div>
   </dialog>
 
@@ -269,8 +315,107 @@
     </form>
   </dialog>
 
+  <dialog id="scheduleDialog" aria-labelledby="scheduleTitle">
+    <form id="scheduleForm">
+      <div class="dialog-head">
+        <h2 class="dialog-title" id="scheduleTitle" data-i18n="scheduleTitle">Schedule this chat</h2>
+        <button type="button" class="icon-btn ripple" id="scheduleClose" aria-label="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 6 12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+      <div class="dialog-body">
+        <p class="sync-status" id="scheduleSummary"></p>
+        <label class="field-label" for="scheduleAt" data-i18n="scheduleWhen">When</label>
+        <input id="scheduleAt" class="text-input" type="datetime-local" required>
+        <p class="var-help" data-i18n="scheduleNote">A notification will remind you — tapping it opens this chat. Needs the Android app.</p>
+        <div class="dialog-actions">
+          <button type="button" class="btn" id="scheduleCancel" data-i18n="cancel">Cancel</button>
+          <button type="submit" class="btn-primary btn" data-i18n="scheduleSet">Schedule</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="paletteDialog" aria-labelledby="paletteTitle">
+    <div class="dialog-head">
+      <h2 class="dialog-title" id="paletteTitle" data-i18n="paletteTitle">Command palette</h2>
+      <button class="icon-btn ripple" id="paletteClose" type="button" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 6 12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+    <div class="dialog-body">
+      <input id="paletteInput" class="text-input" type="text" data-i18n-ph="palettePlaceholder" placeholder="Type a command or number…" autocomplete="off" spellcheck="false">
+      <ul class="palette-list" id="paletteList" role="listbox" aria-label="Commands"></ul>
+    </div>
+  </dialog>
+
+  <dialog id="scannerDialog" aria-labelledby="scannerTitle">
+    <div class="dialog-head">
+      <h2 class="dialog-title" id="scannerTitle" data-i18n="scannerTitle">Scan a code</h2>
+      <button class="icon-btn ripple" id="scannerClose" type="button" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 6 12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+    <div class="dialog-body">
+      <div class="scanner-frame"><video id="scannerVideo" class="scanner-video" playsinline muted></video></div>
+      <p class="scanner-hint" data-i18n="scannerHint">Point the camera at a QR code, MeCard or a phone-number barcode.</p>
+      <p class="scanner-unsupported" id="scannerUnsupported" hidden data-i18n="scannerUnsupported">This browser has no barcode scanner — paste the number instead.</p>
+      <div class="dialog-actions" id="scannerActions" hidden>
+        <button id="scannerStart" class="btn-primary btn" type="button" data-i18n="scannerStart">Start camera</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="templateDialog" aria-labelledby="templateTitle">
+    <form id="templateForm">
+      <div class="dialog-head">
+        <h2 class="dialog-title" id="templateTitle" data-i18n="templateTitle">Template</h2>
+        <button type="button" class="icon-btn ripple" id="templateClose" aria-label="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 6 12 12M18 6 6 18"/></svg>
+        </button>
+      </div>
+      <div class="dialog-body">
+        <label class="field-label" for="templateName" data-i18n="templateName">Name</label>
+        <input id="templateName" class="text-input" type="text" maxlength="40" required>
+        <label class="field-label" for="templateText" data-i18n="templateText">Message</label>
+        <textarea id="templateText" class="template-textarea" maxlength="500" required></textarea>
+        <p class="var-help" data-i18n="templateVars">Variables: {name} {number} {app} {date} {time}</p>
+        <div class="dialog-actions">
+          <button type="button" class="btn" id="templateCancel" data-i18n="cancel">Cancel</button>
+          <button type="button" class="btn danger-btn" id="templateDelete" hidden data-i18n="delete">Delete</button>
+          <button type="submit" class="btn-primary btn" data-i18n="save">Save</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="listsDialog" aria-labelledby="listsTitle">
+    <div class="dialog-head">
+      <h2 class="dialog-title" id="listsTitle" data-i18n="listsTitle">Broadcast list</h2>
+      <button class="icon-btn ripple" id="listsClose" type="button" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 6 12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+    <div class="dialog-body">
+      <div class="dialog-actions between">
+        <button id="listExport" class="btn" type="button" data-i18n="listExport">Export CSV</button>
+        <button id="listImport" class="btn" type="button" data-i18n="listImport">Import CSV</button>
+        <button id="listDelete" class="btn danger-btn" type="button" data-i18n="delete">Delete</button>
+      </div>
+      <div class="list-items" id="listItems"></div>
+      <form id="listAddForm" class="settings-row">
+        <input id="listAddInput" class="text-input" type="text" data-i18n-ph="listAddPlaceholder" placeholder="Name, +91 98765 43210 — or just a number" autocomplete="off" spellcheck="false">
+        <button class="btn" type="submit" data-i18n="listAdd">Add</button>
+      </form>
+      <div class="dialog-actions">
+        <button id="listLaunchAll" class="btn-primary btn" type="button" data-i18n="listLaunchAll">Open all on…</button>
+      </div>
+    </div>
+  </dialog>
+
   <input type="file" id="importFile" accept="application/json,.json" hidden>
   <input type="file" id="vcfFile" accept=".vcf,text/vcard,text/x-vcard" hidden>
+  <input type="file" id="csvFile" accept=".csv,text/csv" hidden>
 
   <div id="toasts" aria-live="polite"></div>
 

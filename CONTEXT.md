@@ -22,9 +22,21 @@ should read this first so discussions use the same words.
 | **Bundle budget** | The CI guard on how many kilobytes the precached app shell may weigh (currently well under 400 KB uncompressed). |
 | **Reproducibility job** | A manual workflow that builds the same commit twice on EAS and compares APK hashes. Informational only — signed APKs are not byte-identical by nature. |
 | **Share target** | Manifest feature letting the installed PWA appear in the Android share sheet; shared text is received as `?text=` and mined for a phone number. |
+| **Share-in (shell)** | The native side of the same idea: the Expo shell registers for `ACTION_SEND` (`expo-share-intent`), and any text shared into the app lands in the page via the shell bridge (`chatlauncher-share`), where the first phone number is extracted. |
+| **Template** | A reusable message stored under `chatlauncher:templates`. `expandTemplate` substitutes `{name} {number} {app} {date} {time}` at launch time; unknown `{placeholders}` are left untouched. |
+| **Broadcast list** | A named group of numbers (`chatlauncher:lists`, max 20 lists × 200 members) launched one-by-one on a chosen target; imports/exports RFC-4180-style CSV. |
+| **Suggestion** | The `js/suggest.js` score that highlights the tile you'd most likely use for the typed number: per-entry default ≫ last-used app ≫ global usage ≈ time-of-day bucket (`stats.byHour`). Display-only — it never overrides an explicit choice. |
+| **Sync envelope** | `chat-launcher-sync` v1: `{salt, iv, ct}` base64 AES-GCM blob. Key = PBKDF2-SHA256(passphrase, 310k). Transport is the user's own WebDAV endpoint (https enforced, plain http only for localhost). |
+| **Sync merge** | `mergeRemote` unions remote-only history/templates/lists and keeps the locally newer copy when both sides have an entry (compares `lastUsed`). |
+| **Scanner** | In-app camera scan via the Web `BarcodeDetector` API (no native dependency): parses QR/MeCard/barcodes for `tel:`, `wa.me`, `?number=` URLs, vCard `TEL` lines or bare numbers. |
+| **Palette** | The `Ctrl/⌘+K` command palette: one fuzzy-filtered list built from launch targets, actions, history, templates, lists and languages. All rendering is text-only (injection-safe). |
+| **Home widget** | The Android 4×2 AppWidget (`react-native-android-widget`): mirrors the top 3 history entries; taps deep-link into the site. Data flows page → shell → AsyncStorage → headless widget task handler. |
+| **QS tile** | The Quick Settings tile service (`LauncherTileService.kt`, injected by `expo-app/plugins/tile-plugin.js`): one tap opens Chat Launcher. |
+| **Clipboard watcher** | Desktop-only (`desktop/src-tauri`): polls the clipboard; a fresh 8–15-digit "number only" text summons the window pre-filled. |
+| **Motion tokens** | CSS custom properties (`--m-fast/med/slow`, `--ease-out/spring`) that every animation derives from — retune (or flatten under `prefers-reduced-motion`) in one place. |
 
 ## Product rules of thumb
 
-- Everything is client-side. No backend, no accounts, no analytics, no network after first load.
-- Any data the app keeps (history, settings, country) lives in `localStorage` under the `chatlauncher:` prefix and never leaves the device.
+- Everything is client-side. No backend, no accounts, no analytics, no network after first load — *except* the opt-in encrypted sync, which talks only to the server the user configured.
+- Any data the app keeps (history, settings, country) lives in `localStorage` under the `chatlauncher:` prefix and never leaves the device (sync uploads are ciphertext only).
 - Honesty over flash: platforms that cannot open a chat by number are labeled `limited` in the UI, README, and capability matrix — never silently faked.

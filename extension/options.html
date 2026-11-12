@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Chat Launcher — options</title>
+  <style>
+    body { font: 14px/1.5 system-ui, sans-serif; max-width: 480px; margin: 24px auto; padding: 0 16px; color: #1c2240; }
+    label { display: block; font-weight: 700; margin: 14px 0 6px; }
+    input { width: 100%; padding: 9px 12px; border-radius: 10px; border: 1px solid #c9cbe0; font: inherit; }
+    button { margin-top: 14px; padding: 9px 18px; border: 0; border-radius: 999px; background: #4f46e5; color: #fff; font: 600 14px system-ui; cursor: pointer; }
+    .ok { color: #16a34a; margin-left: 10px; }
+    p.hint { color: #5b6386; font-size: 12.5px; }
+  </style>
+</head>
+<body>
+  <h1>Chat Launcher</h1>
+  <p>Open any phone number's chat in WhatsApp, Telegram, Signal and more.</p>
+  <label for="baseUrl">Chat Launcher URL</label>
+  <input id="baseUrl" type="url" placeholder="https://avithegod2010.github.io/chat-launcher/" spellcheck="false">
+  <p class="hint">
+    Point this at your own deployment (or a custom domain) if you self-host.
+    Only https URLs are allowed.
+  </p>
+  <button id="save">Save</button><span class="ok" id="ok" hidden>Saved ✓</span>
+  <script src="options.js"></script>
+</body>
+</html>

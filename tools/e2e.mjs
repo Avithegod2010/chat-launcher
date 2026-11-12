@@ -267,6 +267,177 @@ try {
   check('a11y', 'journey crashed', false, String(e).slice(0, 120));
 }
 
+/* Journey 9 — command palette opens with Ctrl+K and runs actions */
+try {
+  const page = await fresh(BASE + '?number=%2B919876543210');
+  await page.evaluate(() => {
+    window.__open = [];
+    window.open = (u) => {
+      window.__open.push(String(u));
+      return {};
+    };
+  });
+  await page.keyboard.down('Control');
+  await page.keyboard.press('k');
+  await page.keyboard.up('Control');
+  await sleep(250);
+  const opened = await page.evaluate(() => document.getElementById('paletteDialog').open);
+  await page.type('#paletteInput', 'whats');
+  await sleep(200);
+  await page.keyboard.press('Enter');
+  await sleep(400);
+  const result = await page.evaluate(() => ({
+    launched: window.__open[0] ?? null,
+    closed: !document.getElementById('paletteDialog').open,
+  }));
+  check(
+    'palette',
+    'Ctrl+K opens palette, Enter launches the typed app',
+    opened && result.closed && result.launched === 'https://wa.me/919876543210',
+    JSON.stringify(result),
+  );
+  await page.close();
+} catch (e) {
+  check('palette', 'journey crashed', false, String(e).slice(0, 120));
+}
+
+/* Journey 10 — message templates: create via dialog, insert via chip */
+try {
+  const page = await fresh(BASE + '?number=%2B919876543210&text=hello');
+  await page.click('#settingsOpen');
+  await page.click('#templateNew');
+  await page.type('#templateName', 'Quick hi');
+  await page.type('#templateText', 'Hey {name}! ({number})');
+  await page.click('#templateForm button[type="submit"]');
+  await sleep(200);
+  await page.evaluate(() => document.getElementById('settingsDialog').close());
+  await sleep(200);
+  // The message row is open (?text=), so chips render; insert one.
+  await page.click('.template-chip');
+  const inserted = await page.evaluate(() => document.getElementById('message').value);
+  const expanded = await page.evaluate(async () => {
+    const m = await import('./js/templates.js');
+    return m.expandTemplate('Hey {name}! ({number})', { name: 'Ada', number: '+919876543210' });
+  });
+  check(
+    'templates',
+    'template saved, chip inserts, variables expand',
+    inserted.includes('{name}') && expanded === 'Hey Ada! (+919876543210)',
+    JSON.stringify({ inserted, expanded }),
+  );
+  await page.close();
+} catch (e) {
+  check('templates', 'journey crashed', false, String(e).slice(0, 120));
+}
+
+/* Journey 11 — broadcast list: create, add member */
+try {
+  const page = await fresh();
+  await page.click('#settingsOpen');
+  await page.click('#listNew');
+  await sleep(200);
+  await page.keyboard.type('Team');
+  await page.keyboard.press('Enter');
+  await sleep(300);
+  await page.type('#listAddInput', 'Ada, +15551234567');
+  await page.click('#listAddForm button[type="submit"]');
+  await page.type('#listAddInput', '15552223333');
+  await page.click('#listAddForm button[type="submit"]');
+  await sleep(200);
+  const state = await page.evaluate(() => ({
+    rows: document.querySelectorAll('#listItems .manage-row').length,
+    title: document.getElementById('listsTitle').textContent,
+  }));
+  await page.evaluate(() => document.getElementById('listsDialog').close());
+  await page.evaluate(() => document.getElementById('settingsDialog').close());
+  check(
+    'lists',
+    'list created, members parsed and added',
+    state.rows === 2 && state.title === 'Team',
+    JSON.stringify(state),
+  );
+  await page.close();
+} catch (e) {
+  check('lists', 'journey crashed', false, String(e).slice(0, 120));
+}
+
+/* Journey 12 — scanner dialog opens and degrades safely headless */
+try {
+  const page = await fresh(BASE + '?number=%2B919876543210');
+  await page.click('#scanBtn');
+  await sleep(400);
+  const scan = await page.evaluate(() => ({
+    open: document.getElementById('scannerDialog').open,
+    hasVideo: !!document.getElementById('scannerVideo'),
+  }));
+  await page.keyboard.press('Escape');
+  const stopped = await page.evaluate(() => !document.getElementById('scannerDialog').open);
+  check(
+    'scanner',
+    'scan dialog opens with video and closes cleanly',
+    scan.open && scan.hasVideo && stopped,
+    JSON.stringify(scan),
+  );
+  await page.close();
+} catch (e) {
+  check('scanner', 'journey crashed', false, String(e).slice(0, 120));
+}
+
+/* Journey 13 — large-text mode + high contrast flip document attributes */
+try {
+  const page = await fresh();
+  await page.click('#settingsOpen');
+  await page.click('#textGroup input[value="large"]');
+  await page.click('#contrastToggle');
+  await sleep(250);
+  const attrs = await page.evaluate(() => ({
+    text: document.documentElement.dataset.text,
+    contrast: document.documentElement.dataset.contrast,
+    rootFont: getComputedStyle(document.documentElement).fontSize,
+  }));
+  await page.keyboard.press('Escape');
+  check(
+    'a11y',
+    'large text + high contrast apply instantly',
+    attrs.text === 'large' && attrs.contrast === 'high' && parseFloat(attrs.rootFont) >= 17,
+    JSON.stringify(attrs),
+  );
+  await page.close();
+} catch (e) {
+  check('a11y', 'journey crashed', false, String(e).slice(0, 120));
+}
+
+/* Journey 14 — suggestion badge follows per-number history */
+try {
+  const page = await fresh();
+  await page.evaluate(() => {
+    window.open = () => ({});
+    const fill = (v) => {
+      const i = document.getElementById('phone');
+      i.value = v;
+      i.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+    fill('5551234567');
+    document.querySelector('.tile[data-app=telegram]').click();
+  });
+  await sleep(300);
+  await page.evaluate(() => {
+    const i = document.getElementById('phone');
+    i.value = '';
+    i.dispatchEvent(new Event('input', { bubbles: true }));
+    i.value = '5551234567';
+    i.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  await sleep(300);
+  const badge = await page.evaluate(
+    () => document.querySelector('.tile.suggested')?.dataset.app ?? null,
+  );
+  check('suggest', 'suggested badge lands on the last-used app', badge === 'telegram', String(badge));
+  await page.close();
+} catch (e) {
+  check('suggest', 'journey crashed', false, String(e).slice(0, 120));
+}
+
 await browser.close();
 
 const failed = results.filter((r) => !r.pass);

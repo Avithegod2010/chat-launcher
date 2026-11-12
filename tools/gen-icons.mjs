@@ -229,3 +229,12 @@ for (const [name, buf] of shellTargets) {
   writeFileSync(join(SHELL, name), buf);
   console.log(`✓ expo-app/assets/${name} (${buf.length} bytes)`);
 }
+
+// Browser extension icons (MV3 manifest declares 48 + 128).
+const EXT = join(ROOT, 'extension', 'icons');
+mkdirSync(EXT, { recursive: true });
+for (const size of [48, 128]) {
+  const buf = renderIcon(size);
+  writeFileSync(join(EXT, `icon-${size}.png`), buf);
+  console.log(`✓ extension/icons/icon-${size}.png (${buf.length} bytes)`);
+}

@@ -6,6 +6,8 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 jobs:
   changelog:
@@ -105,6 +107,28 @@ jobs:
         run: |
           TAG="${GITHUB_REF#refs/tags/}"
           gh release upload "$TAG" expo-app/app-release.apk expo-app/SHA256SUMS.txt --clobber
+
+      - name: Generate SBOMs (cycloneDX)
+        run: |
+          npm install -g @cyclonedx/cyclonedx-npm
+          cyclonedx-npm --output-file sbom-web.json --output-format JSON
+          cd expo-app
+          cyclonedx-npm --output-file ../sbom-android.json --output-format JSON
+          cd ..
+          sha256sum sbom-web.json sbom-android.json >> expo-app/SHA256SUMS.txt
+
+      - name: Attach SBOMs to the release
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          gh release upload "$TAG" sbom-web.json sbom-android.json --clobber || true
+
+      - name: Attest build provenance for the APK
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: expo-app/app-release.apk
 
       - name: Submit AAB to Play (only when the service account secret exists)
         if: ${{ env.GOOGLE_SERVICE_ACCOUNT != '' }}

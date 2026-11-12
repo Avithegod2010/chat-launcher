@@ -3,6 +3,43 @@
 All notable changes to Chat Launcher. Newest entries are prepended
 automatically by the release workflow from each GitHub Release's notes.
 
+## [v2.0.0] — 2026-11-13
+
+The big one: the 20-item "Native + Sync" roadmap, end to end.
+
+### Web app
+- **Camera scanner** — in-app QR/MeCard/barcode scanning via the Web `BarcodeDetector` API (no native dependency); parses `tel:`, `wa.me`, `?number=` URLs, vCard `TEL` lines and bare numbers into the input
+- **End-to-end encrypted sync** — passphrase → PBKDF2 (310k) → AES-GCM; push/pull to your own WebDAV server (Nextcloud-compatible); the server only ever sees ciphertext; pull merges without clobbering newer local data
+- **Message templates** — reusable texts with `{name} {number} {app} {date} {time}` variables, managed in settings, quick-inserted as chips, expanded at launch
+- **Broadcast lists** — named number groups (20 × 200) with RFC-4180 CSV import/export and "open all on…" staggered launching
+- **Smart suggestion** — per-number last-app, global usage and time-of-day buckets (new `stats.byHour`) highlight the likely tile (✦ badge); display-only
+- **Command palette** — `Ctrl/⌘+K`: launch apps, run actions, open history entries, switch language/theme, insert templates
+- **Contact avatars** — the shell's contact picker now carries the photo into history chips; desktop shows initials avatars
+- **Design system v2** — motion tokens (`--m-fast/med/slow`, easing pairs), View Transitions on theme/accent/language changes, drag-to-dismiss country sheet, large-text mode and high-contrast surfaces (plus `prefers-contrast` support)
+- **12 languages** — added Deutsch, Français, Português, Русский, 日本語; genuine key-parity test across all tables
+
+### Android shell
+- **Home-screen widget** (4×2) — mirrors your top 3 history targets, taps deep-link into the launcher (`react-native-android-widget` + AsyncStorage bridge)
+- **Quick Settings tile** — notification-shade shortcut via a small Kotlin TileService config plugin
+- **Share-in** — `expo-share-intent`: text shared from any app lands in the launcher and the number is extracted
+- **Scheduled chats** — `expo-notifications` reminders whose tap opens the pre-filled deep link
+- **Contact picker v2** — photos and names now ride the bridge into history
+
+### Platform & distribution
+- **Browser extension** (`extension/`, MV3) — selection pill, context-menu launch, options page to point at a custom deployment, zero-dependency zip packer
+- **Tauri desktop v2** — tray icon (Show/Quit), clipboard watcher (copy a number anywhere → launcher opens pre-filled), updater plugin wired
+- **iOS profile** — EAS production profile + submit env plumbing (needs an Apple Developer account to run)
+- **Play Store tooling** — fastlane lanes (`internal`/`production`/`metadata_only`) + store metadata
+- **Supply-chain hardening** — CycloneDX SBOMs on every release, build-provenance attestations for the APK, Dependabot config for npm + GitHub Actions, Expo patch bump, extension icon pipeline
+
+### Security
+- CSP `connect-src` relaxed from `'none'` to `'self' https:` — only so the opt-in sync can reach a user-configured server; the app itself still fetches nothing (documented in `docs/SECURITY-AUDIT.md`)
+- New adversarial probes: hostile history labels through the palette, and shell-bridge message floods (proto-pollution, huge payloads, javascript: URLs) — all inert
+- Sync envelope tampering and wrong passphrases are rejected by GCM auth; merge paths re-validate payloads through the strict backup sanitizer
+
+### Numbers
+- 104 unit/property tests · 11 adversarial probes · 17 e2e journeys · bundle budget raised to accommodate 12 languages (404 KB / 520 KB precached)
+
 ## [v1.3.1] — 2026-11-12
 
 ### Fixed

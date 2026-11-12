@@ -28,6 +28,7 @@ export function createStats(storage) {
         firstUsed: Number(parsed.firstUsed) || Date.now(),
         byApp: cleanCounts(parsed.byApp),
         byMonth: cleanCounts(parsed.byMonth),
+        byHour: cleanCounts(parsed.byHour),
       };
     } catch {
       return null;
@@ -65,23 +66,28 @@ export function createStats(storage) {
   return {
     /**
      * @param {string} appId launch target that was opened
+     * @param {number} [hour] 0-23 hour-of-day bucket (defaults to now)
      * @returns {object} the updated aggregate
      */
-    record(appId) {
-      const s = read() ?? { total: 0, firstUsed: Date.now(), byApp: {}, byMonth: {} };
+    record(appId, hour) {
+      const s = read() ?? { total: 0, firstUsed: Date.now(), byApp: {}, byMonth: {}, byHour: {} };
       s.total += 1;
       if (!/^[\w-]{1,24}$/.test(appId)) return s;
       s.byApp[appId] = (s.byApp[appId] ?? 0) + 1;
-      const mk = monthKey(Date.now());
+      const now = Date.now();
+      const mk = monthKey(now);
       s.byMonth[mk] = (s.byMonth[mk] ?? 0) + 1;
       s.byMonth = pruneMonths(s.byMonth);
+      const hk = String(((Number(hour ?? new Date(now).getHours()) || 0) % 24 + 24) % 24);
+      s.byHour = s.byHour ?? {};
+      s.byHour[hk] = (s.byHour[hk] ?? 0) + 1;
       write(s);
       return s;
     },
 
     /** @returns {object} */
     get() {
-      return read() ?? { total: 0, firstUsed: Date.now(), byApp: {}, byMonth: {} };
+      return read() ?? { total: 0, firstUsed: Date.now(), byApp: {}, byMonth: {}, byHour: {} };
     },
 
     clear() {
@@ -90,7 +96,7 @@ export function createStats(storage) {
       } catch {
         /* ignore */
       }
-      return { total: 0, firstUsed: Date.now(), byApp: {}, byMonth: {} };
+      return { total: 0, firstUsed: Date.now(), byApp: {}, byMonth: {}, byHour: {} };
     },
 
     /** Replace aggregates wholesale (backup import). */
@@ -100,6 +106,7 @@ export function createStats(storage) {
         firstUsed: Math.max(0, Number(s?.firstUsed) || Date.now()),
         byApp: cleanCounts(s?.byApp),
         byMonth: cleanCounts(s?.byMonth),
+        byHour: cleanCounts(s?.byHour),
       };
       write(safe);
       return safe;

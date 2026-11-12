@@ -4,6 +4,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  Image,
   Linking,
   Modal,
   Platform,
@@ -15,7 +16,11 @@ import {
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import * as Contacts from 'expo-contacts';
+import * as Notifications from 'expo-notifications';
 import * as QuickActions from 'expo-quick-actions';
+import { useShareIntent } from 'expo-share-intent';
+import { requestWidgetUpdate } from 'react-native-android-widget';
+import { HomeWidgetView, WIDGET_NAME, saveWidgetItems } from './widgets/HomeWidget';
 
 /**
  * Thin shell around the live Chat Launcher PWA (the real app lives on
@@ -24,23 +29,38 @@ import * as QuickActions from 'expo-quick-actions';
  * open the right installed app instead of loading inside the WebView).
  *
  * Shell-only extras (not part of the web app):
- *  - native contact picker (#10): pick a contact, the number is pushed
- *    into the page through a postMessage bridge
- *  - dynamic launcher shortcuts (#11): the page posts its top history
- *    entries, the shell mirrors them as Android/iOS quick actions
+ *  - native contact picker: pick a contact, the number (+ name + photo) is
+ *    pushed into the page through a postMessage bridge
+ *  - dynamic launcher shortcuts: the page posts its top history entries,
+ *    the shell mirrors them as Android/iOS quick actions
+ *  - home-screen widget (react-native-android-widget): mirrors the top
+ *    history entries, one tap opens the site with the number pre-filled
+ *  - share-in target (expo-share-intent): text shared from any app lands in
+ *    the page and the first phone number in it is extracted there
+ *  - scheduled chats (expo-notifications): the page asks for a notification
+ *    at a chosen time; tapping it opens the deep link
  */
 const WEB_ORIGIN = 'https://avithegod2010.github.io';
 const START_URL = `${WEB_ORIGIN}/chat-launcher/`;
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowBanner: true,
+    shouldShowList: true,
+    shouldPlaySound: false,
+    shouldSetBadge: false,
+  }),
+});
 
 function isAppUrl(url) {
   if (!url || url.startsWith('about:')) return true;
   return url.startsWith(WEB_ORIGIN + '/chat-launcher');
 }
 
-/** Push a number into the page as a message event (the web app listens). */
-function contactMessage(number) {
-  const payload = JSON.stringify({ type: 'chatlauncher-contact', number });
-  return `window.postMessage(${payload}, '*'); true;`;
+/** Push a message into the page (the web app listens for these types). */
+function shellMessage(payload) {
+  const json = JSON.stringify(payload);
+  return `window.postMessage(${json}, '*'); true;`;
 }
 
 export default function App() {
@@ -49,9 +69,10 @@ export default function App() {
   const [contactsLoading, setContactsLoading] = useState(false);
   const [contacts, setContacts] = useState([]);
   const [query, setQuery] = useState('');
+  const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntent();
 
   const pushNumber = useCallback((number) => {
-    webRef.current?.injectJavaScript(contactMessage(number));
+    webRef.current?.injectJavaScript(shellMessage({ type: 'chatlauncher-contact', number }));
   }, []);
 
   /** Quick actions land here — reload the app URL with the number params. */
@@ -72,9 +93,13 @@ export default function App() {
   }, [openFromAction]);
 
   const onShellMessage = useCallback((event) => {
+    let data;
     try {
-      const data = JSON.parse(event.nativeEvent.data);
-      if (data?.type !== 'history' || !Array.isArray(data.items)) return;
+      data = JSON.parse(event.nativeEvent.data);
+    } catch {
+      return;
+    }
+    if (data?.type === 'history' && Array.isArray(data.items)) {
       const items = data.items
         .filter((it) => typeof it?.e164 === 'string' && /^\d{7,15}$/.test(it.e164))
         .slice(0, 3)
@@ -84,9 +109,43 @@ export default function App() {
           params: { number: it.e164, app: it.app || '' },
         }));
       if (items.length) QuickActions.setItems(items).catch(() => {});
-    } catch {
-      /* ignore non-JSON messages */
+      // Keep the home-screen widget in sync with the same data.
+      saveWidgetItems(items).then(() => {
+        requestWidgetUpdate({
+          widgetName: WIDGET_NAME,
+          renderWidget: () => <HomeWidgetView items={items} />,
+        }).catch(() => {});
+      });
+      return;
     }
+    if (data?.type === 'chatlauncher-schedule') {
+      scheduleChatNotification(data).catch(() => {});
+    }
+  }, []);
+
+  /* ---- share-in target -------------------------------------------------- */
+  useEffect(() => {
+    if (!hasShareIntent) return;
+    const text = shareIntent.text ?? '';
+    if (text.trim()) {
+      webRef.current?.injectJavaScript(
+        shellMessage({ type: 'chatlauncher-share', text: text.slice(0, 2000) }),
+      );
+    }
+    resetShareIntent();
+  }, [hasShareIntent, shareIntent, resetShareIntent]);
+
+  /* ---- scheduled chats --------------------------------------------------- */
+  useEffect(() => {
+    const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+      const url = response?.notification?.request?.content?.data?.url;
+      if (url && isAppUrl(url)) {
+        webRef.current?.injectJavaScript(`window.location.href = ${JSON.stringify(url)}; true;`);
+      } else if (url) {
+        Linking.openURL(url).catch(() => {});
+      }
+    });
+    return () => sub.remove();
   }, []);
 
   /* ---- native contact picker ------------------------------------------ */
@@ -99,7 +158,11 @@ export default function App() {
         return;
       }
       const { data } = await Contacts.getContactsAsync({
-        fields: [Contacts.Fields.PhoneNumbers, Contacts.Fields.Name],
+        fields: [
+          Contacts.Fields.PhoneNumbers,
+          Contacts.Fields.Name,
+          Contacts.Fields.ImageBase64,
+        ],
       });
       const list = [];
       for (const c of data) {
@@ -111,6 +174,9 @@ export default function App() {
           id: String(c.id ?? list.length),
           name: c.name || `+${numbers[0].replace(/^\+/, '')}`,
           number: numbers.find((n) => n.startsWith('+')) ?? numbers[0],
+          avatar: typeof c.imageBase64 === 'string' && c.imageBase64.length < 12000
+            ? `data:image/png;base64,${c.imageBase64}`
+            : null,
         });
         if (list.length >= 400) break;
       }
@@ -127,10 +193,17 @@ export default function App() {
 
   const chooseContact = useCallback(
     (contact) => {
-      pushNumber(contact.number);
+      webRef.current?.injectJavaScript(
+        shellMessage({
+          type: 'chatlauncher-contact',
+          number: contact.number,
+          name: contact.name?.startsWith('+') ? null : contact.name,
+          avatar: contact.avatar,
+        }),
+      );
       setContactsOpen(false);
     },
-    [pushNumber],
+    [],
   );
 
   const filtered = query
@@ -199,10 +272,21 @@ export default function App() {
             keyboardShouldPersistTaps="handled"
             renderItem={({ item }) => (
               <Pressable style={styles.row} onPress={() => chooseContact(item)}>
-                <Text style={styles.rowName} numberOfLines={1}>
-                  {item.name}
-                </Text>
-                <Text style={styles.rowNumber}>{item.number}</Text>
+                {item.avatar ? (
+                  <Image source={{ uri: item.avatar }} style={styles.rowAvatar} />
+                ) : (
+                  <View style={[styles.rowAvatar, styles.rowAvatarFallback]}>
+                    <Text style={styles.rowAvatarText}>
+                      {(item.name || '#').trim().charAt(0).toUpperCase()}
+                    </Text>
+                  </View>
+                )}
+                <View style={styles.rowTexts}>
+                  <Text style={styles.rowName} numberOfLines={1}>
+                    {item.name}
+                  </Text>
+                  <Text style={styles.rowNumber}>{item.number}</Text>
+                </View>
               </Pressable>
             )}
             ListEmptyComponent={<Text style={styles.empty}>No contacts with phone numbers.</Text>}
@@ -211,6 +295,34 @@ export default function App() {
       </Modal>
     </View>
   );
+}
+
+/** Schedule the "your chat is due" notification (web asks via the bridge). */
+async function scheduleChatNotification({ seconds, number, url }) {
+  try {
+    const current = await Notifications.getPermissionsAsync();
+    let status = current.status;
+    if (status !== 'granted') {
+      const asked = await Notifications.requestPermissionsAsync();
+      status = asked.status;
+    }
+    if (status !== 'granted') return;
+    const safeSeconds = Math.min(Math.max(Number(seconds) || 0, 60), 60 * 60 * 24 * 30);
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: 'Chat Launcher',
+        body: `Open your chat with +${String(number ?? '').slice(0, 15)}`,
+        data: { url: String(url ?? START_URL) },
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+        seconds: safeSeconds,
+        channelId: 'chatlauncher',
+      },
+    });
+  } catch {
+    /* notifications unavailable — the web app already told the user */
+  }
 }
 
 const styles = StyleSheet.create({
@@ -248,13 +360,22 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: 'rgba(255,255,255,0.12)',
   },
-  rowName: { color: '#e9ecfb', fontSize: 15, fontWeight: '600', flex: 1, marginRight: 10 },
+  rowAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 12,
+    backgroundColor: 'rgba(108,92,246,0.35)',
+  },
+  rowAvatarFallback: { alignItems: 'center', justifyContent: 'center' },
+  rowAvatarText: { color: '#e9ecfb', fontSize: 16, fontWeight: '700' },
+  rowTexts: { flex: 1 },
+  rowName: { color: '#e9ecfb', fontSize: 15, fontWeight: '600' },
   rowNumber: { color: '#98a0c0', fontSize: 13 },
   empty: { color: '#98a0c0', textAlign: 'center', marginTop: 30 },
 });

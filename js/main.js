@@ -16,6 +16,10 @@ import { createHistory } from './history.js';
 import { createStats } from './stats.js';
 import { createQueue } from './queue.js';
 import { exportData, importData } from './backup.js';
+import { createTemplates, expandTemplate } from './templates.js';
+import { createLists, parseMembers, toCsv, parseCsv } from './lists.js';
+import { suggestApp, isConfident } from './suggest.js';
+import { createSync, encryptPayload, mergeRemote } from './sync.js';
 import { derivePair } from './colors.js';
 import { parseVcf } from './vcf.js';
 import { drawQr } from './qr.js';
@@ -23,6 +27,7 @@ import { availableLangs, initLang, setLang, t } from './i18n.js';
 import {
   attachRipples,
   askText,
+  attachSheetDrag,
   burst,
   openDialog,
   prefersReducedMotion,
@@ -31,11 +36,20 @@ import {
   toast,
   vibrate,
   warnStorageOnce,
+  withViewTransition,
 } from './ui.js';
 
-const APP_VERSION = '1.3.1';
+const APP_VERSION = '2.0.0';
 const SETTINGS_KEY = 'chatlauncher:settings';
+const SYNC_CFG_KEY = 'chatlauncher:sync';
 const $ = (sel) => document.querySelector(sel);
+
+/** Display names for the language palette entries. */
+const LANG_LABELS = {
+  en: 'English', hi: 'हिन्दी', es: 'Español', ar: 'العربية', mr: 'मराठी',
+  bn: 'বাংলা', ta: 'தமிழ்', de: 'Deutsch', fr: 'Français', pt: 'Português',
+  ru: 'Русский', ja: '日本語',
+};
 
 const ACCENTS = {
   violet: ['#6c5cf6', '#a855f7'],
@@ -50,9 +64,12 @@ const { ok: storageOk, backend: storage } = safeStorage();
 const history = createHistory(storage);
 const stats = createStats(storage);
 const queue = createQueue(storage);
+const templates = createTemplates(storage);
+const lists = createLists(storage);
+const sync = createSync();
 
-/** @type {{theme: string, country: string|null, order: string[],
- *          disabled: string[], accent: string, accentCustom: string|null}} */
+/** @type {{theme: string, textScale: string, contrast: string, country: string|null,
+ *          order: string[], disabled: string[], accent: string, accentCustom: string|null}} */
 let settings = loadSettings();
 
 const state = {
@@ -60,6 +77,7 @@ const state = {
   national: '',
   message: '',
   defaultApp: null, // set via ?app=
+  suggested: null, // smart app suggestion for the typed number
 };
 
 function loadSettings() {
@@ -67,6 +85,8 @@ function loadSettings() {
     const raw = JSON.parse(storage.getItem(SETTINGS_KEY) ?? '{}');
     return {
       theme: ['system', 'light', 'dark'].includes(raw.theme) ? raw.theme : 'system',
+      textScale: raw.textScale === 'large' ? 'large' : 'normal',
+      contrast: raw.contrast === 'high' ? 'high' : 'normal',
       country: typeof raw.country === 'string' ? raw.country : null,
       order: Array.isArray(raw.order) ? raw.order.filter((id) => getApp(id)) : [...DEFAULT_ORDER],
       disabled: Array.isArray(raw.disabled) ? raw.disabled.filter((id) => getApp(id)) : [],
@@ -74,7 +94,16 @@ function loadSettings() {
       accentCustom: /^#[0-9a-f]{6}$/i.test(raw.accentCustom ?? '') ? raw.accentCustom : null,
     };
   } catch {
-    return { theme: 'system', country: null, order: [...DEFAULT_ORDER], disabled: [], accent: 'violet', accentCustom: null };
+    return {
+      theme: 'system',
+      textScale: 'normal',
+      contrast: 'normal',
+      country: null,
+      order: [...DEFAULT_ORDER],
+      disabled: [],
+      accent: 'violet',
+      accentCustom: null,
+    };
   }
 }
 
@@ -117,6 +146,7 @@ function switchLang(lang) {
   applyStaticTranslations();
   renderTiles();
   renderHistory();
+  renderTemplateChips();
   updateValidity();
   renderSettings();
 }
@@ -130,6 +160,14 @@ function applyTheme() {
     settings.theme === 'system' ? (systemDark.matches ? 'dark' : 'light') : settings.theme;
   document.documentElement.dataset.theme = resolved;
   $('meta[name="theme-color"]')?.setAttribute('content', resolved === 'dark' ? '#0b1020' : '#eef0fb');
+}
+
+function applyTextScale() {
+  document.documentElement.dataset.text = settings.textScale === 'large' ? 'large' : 'normal';
+}
+
+function applyContrast() {
+  document.documentElement.dataset.contrast = settings.contrast === 'high' ? 'high' : 'normal';
 }
 
 function applyAccent() {
@@ -146,12 +184,7 @@ function cycleTheme() {
   const order = ['system', 'light', 'dark'];
   settings.theme = order[(order.indexOf(settings.theme) + 1) % order.length];
   saveSettings();
-  const flip = () => applyTheme();
-  if (document.startViewTransition && !prefersReducedMotion()) {
-    document.startViewTransition(flip);
-  } else {
-    flip();
-  }
+  withViewTransition(() => applyTheme());
   toast(t('themeNow', { theme: settings.theme }));
 }
 
@@ -203,6 +236,18 @@ function setNational(digits) {
   const country = countryByIso(state.iso);
   phoneInput.value = formatAsYouType(state.national, state.iso, country?.dial ?? '');
   updateValidity();
+  updateSuggestion();
+}
+
+/** ✦ Smart suggestion: highlight the tile this number would most likely use. */
+function updateSuggestion() {
+  const e164 = currentE164();
+  const entry = e164 ? history.list().find((x) => x.e164 === e164) ?? null : null;
+  const appId = e164 ? suggestApp(entry, stats.get()) : null;
+  state.suggested = isConfident(appId, stats.get()) ? appId : null;
+  grid.querySelectorAll('.tile').forEach((tile) => {
+    tile.classList.toggle('suggested', !!state.suggested && tile.dataset.app === state.suggested);
+  });
 }
 
 phoneInput.addEventListener('input', () => {
@@ -287,6 +332,8 @@ countryChip.addEventListener('click', openCountrySheet);
 countrySheet.querySelector('.sheet-backdrop').addEventListener('click', closeCountrySheet);
 countrySheet.querySelector('.sheet-close').addEventListener('click', closeCountrySheet);
 countrySearch.addEventListener('input', () => renderCountryList(countrySearch.value));
+// Swipe the sheet down to dismiss it (mobile-friendly, motion-aware).
+attachSheetDrag(countrySheet.querySelector('.sheet'), { onDismiss: closeCountrySheet });
 
 /* ------------------------------------------------------------------- tiles */
 
@@ -342,6 +389,7 @@ function renderTiles() {
       return btn;
     }),
   );
+  updateSuggestion();
 }
 
 /* ----------------------------------------------------------------- launch */
@@ -375,11 +423,18 @@ function launch(app, event) {
 
 /** Shared by single launch and bulk rows. */
 function launchNumber(app, e164, message = state.message) {
+  const entry = history.list().find((x) => x.e164 === e164);
   history.add(e164, undefined, app.id);
   renderHistory();
-  stats.record(app.id);
+  stats.record(app.id, new Date().getHours());
   vibrate(8);
-  const url = app.buildUrl(e164, app.supportsMessage ? message : '');
+  // Templates: expand {name} {number} {app} {date} {time} at launch time.
+  const expanded = expandTemplate(message, {
+    name: entry?.label ?? '',
+    number: `+${e164}`,
+    app: app.name,
+  });
+  const url = app.buildUrl(e164, app.supportsMessage ? expanded : '');
   const isWebLink = url.startsWith('https://');
   if (!isWebLink) {
     location.href = url;
@@ -476,6 +531,21 @@ function renderHistory() {
       const flag = document.createElement('span');
       flag.className = 'flag';
       flag.textContent = flagForE164(entry.e164);
+      // Contact photo when the shell shared one; otherwise an initials avatar.
+      if (entry.avatar || entry.label) {
+        const avatarWrap = document.createElement('span');
+        avatarWrap.className = 'chip-avatar';
+        avatarWrap.style.background = `linear-gradient(135deg, hsl(${hashHue(entry.e164)} 62% 46%), hsl(${hashHue(entry.e164 + 'b')} 62% 38%))`;
+        if (entry.avatar) {
+          const img = document.createElement('img');
+          img.src = entry.avatar;
+          img.alt = '';
+          avatarWrap.append(img);
+        } else {
+          avatarWrap.append(document.createTextNode(entry.label.trim().charAt(0).toUpperCase()));
+        }
+        chip.append(avatarWrap);
+      }
       const label = document.createElement('span');
       label.className = 'chip-label';
       const nameLine = document.createElement('span');
@@ -659,6 +729,13 @@ function shareUrl(e164) {
   return `${location.origin}${location.pathname}?number=${encodeURIComponent('+' + e164)}`;
 }
 
+/** Deterministic hue per number so avatar fallbacks get stable colors. */
+function hashHue(seed) {
+  let h = 0;
+  for (const ch of String(seed)) h = (h * 31 + ch.charCodeAt(0)) % 360;
+  return h;
+}
+
 document.addEventListener('click', (e) => {
   if (openMenu && !openMenu.contains(e.target) && !e.target.closest('.chip-more')) closeMenus();
 });
@@ -743,6 +820,7 @@ msgToggle.addEventListener('click', () => {
   const open = row.classList.toggle('open');
   msgToggle.setAttribute('aria-expanded', String(open));
   msgToggle.textContent = open ? t('removeMessage') : t('addMessage');
+  renderTemplateChips();
   if (open) msgInput.focus();
   else if (!msgInput.value) state.message = '';
 });
@@ -919,6 +997,28 @@ function renderSettings() {
     input.onchange = () => switchLang(input.value);
   });
 
+  const textGroup = $('#textGroup');
+  textGroup?.querySelectorAll('input').forEach((input) => {
+    input.checked = input.value === settings.textScale;
+    input.onchange = () => {
+      settings.textScale = input.value;
+      saveSettings();
+      withViewTransition(applyTextScale);
+    };
+  });
+
+  const contrastToggle = $('#contrastToggle');
+  if (contrastToggle) {
+    contrastToggle.classList.toggle('on', settings.contrast === 'high');
+    contrastToggle.setAttribute('aria-checked', String(settings.contrast === 'high'));
+    contrastToggle.onclick = () => {
+      settings.contrast = settings.contrast === 'high' ? 'normal' : 'high';
+      saveSettings();
+      withViewTransition(applyContrast);
+      renderSettings();
+    };
+  }
+
   const accentRow = $('#accentRow');
   const customInput = $('#accentCustom');
   if (customInput) {
@@ -1001,9 +1101,719 @@ function renderSettings() {
     }),
   );
 
+  renderTemplateList();
+  renderListList();
+  renderSyncSection();
   $('#versionNote').textContent =
     `Chat Launcher v${APP_VERSION} · ${storageOk ? t('dataOnDevice') : t('storageBlocked')}`;
 }
+
+/* -------------------------------------------------- v2.0 settings sections */
+
+function manageRow(title, sub, actions) {
+  const row = document.createElement('div');
+  row.className = 'manage-row';
+  const grow = document.createElement('span');
+  grow.className = 'grow';
+  grow.textContent = title;
+  if (sub) {
+    const s = document.createElement('span');
+    s.className = 'sub';
+    s.textContent = sub;
+    grow.append(s);
+  }
+  row.append(grow);
+  for (const [label, fn, cls] of actions) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = `icon-btn ripple${cls ? ' ' + cls : ''}`;
+    b.textContent = label;
+    b.setAttribute('aria-label', `${label} ${title}`);
+    b.addEventListener('click', fn);
+    row.append(b);
+  }
+  return row;
+}
+
+function renderTemplateList() {
+  const wrap = $('#templateList');
+  if (!wrap) return;
+  const items = templates.list();
+  if (!items.length) {
+    const p = document.createElement('p');
+    p.className = 'manage-empty';
+    p.textContent = t('templatesEmpty');
+    wrap.replaceChildren(p);
+    return;
+  }
+  wrap.replaceChildren(
+    ...items.map((tpl) =>
+      manageRow(tpl.name, tpl.text.slice(0, 60), [
+        ['✎', () => openTemplateEditor(tpl.id)],
+        ['🗑', () => {
+          templates.remove(tpl.id);
+          renderTemplateList();
+          renderTemplateChips();
+        }, 'danger'],
+      ]),
+    ),
+  );
+}
+
+function renderListList() {
+  const wrap = $('#listList');
+  if (!wrap) return;
+  const items = lists.list();
+  if (!items.length) {
+    const p = document.createElement('p');
+    p.className = 'manage-empty';
+    p.textContent = t('listsEmpty');
+    wrap.replaceChildren(p);
+    return;
+  }
+  wrap.replaceChildren(
+    ...items.map((l) =>
+      manageRow(l.name, t('listCount', { n: l.items.length }), [
+        ['✎', () => openListEditor(l.id)],
+        ['🗑', () => {
+          lists.remove(l.id);
+          renderListList();
+        }, 'danger'],
+      ]),
+    ),
+  );
+}
+
+/* ------------------------------------------------------------- sync (E2E) */
+
+let syncCfg = loadSyncCfg();
+
+function loadSyncCfg() {
+  try {
+    const raw = JSON.parse(storage.getItem(SYNC_CFG_KEY) ?? '{}');
+    return {
+      url: typeof raw.url === 'string' ? raw.url : '',
+      username: typeof raw.username === 'string' ? raw.username : '',
+      password: typeof raw.password === 'string' ? raw.password : '',
+      passphrase: typeof raw.passphrase === 'string' ? raw.passphrase : '',
+      lastSync: Number(raw.lastSync) || 0,
+    };
+  } catch {
+    return { url: '', username: '', password: '', passphrase: '', lastSync: 0 };
+  }
+}
+
+function saveSyncCfg() {
+  try {
+    storage.setItem(SYNC_CFG_KEY, JSON.stringify(syncCfg));
+  } catch {
+    /* non-persistent */
+  }
+}
+
+function syncStatus(msg, kind = '') {
+  const el = $('#syncStatus');
+  if (!el) return;
+  el.textContent = msg;
+  el.className = `sync-status${kind ? ' ' + kind : ''}`;
+}
+
+function renderSyncSection() {
+  $('#syncUrl').value = syncCfg.url;
+  $('#syncUser').value = syncCfg.username;
+  $('#syncPass').value = syncCfg.password;
+  $('#syncPhrase').value = syncCfg.passphrase;
+  if (syncCfg.lastSync) {
+    syncStatus(t('syncLast', { when: new Date(syncCfg.lastSync).toLocaleString() }));
+  }
+}
+
+function syncPayload() {
+  return {
+    settings,
+    history: history.list(),
+    stats: stats.get(),
+    templates: templates.list(),
+    lists: lists.list(),
+  };
+}
+
+function readSyncInputs() {
+  syncCfg.url = $('#syncUrl').value.trim();
+  syncCfg.username = $('#syncUser').value.trim();
+  syncCfg.password = $('#syncPass').value;
+  syncCfg.passphrase = $('#syncPhrase').value;
+  saveSyncCfg();
+  return syncCfg;
+}
+
+$('#syncPush')?.addEventListener('click', async () => {
+  const cfg = readSyncInputs();
+  if (!cfg.url || !cfg.passphrase) {
+    syncStatus(t('syncNeedUrlPass'), 'bad');
+    return;
+  }
+  syncStatus(t('syncWorking'));
+  const envelope = await encryptPayload(syncPayload(), cfg.passphrase);
+  const res = await sync.push(cfg, envelope);
+  if (res.ok) {
+    syncCfg.lastSync = Date.now();
+    saveSyncCfg();
+    syncStatus(t('syncPushed'), 'good');
+  } else {
+    syncStatus(t('syncFail', { err: res.error ?? `HTTP ${res.status}` }), 'bad');
+  }
+});
+
+$('#syncPull')?.addEventListener('click', async () => {
+  const cfg = readSyncInputs();
+  if (!cfg.url || !cfg.passphrase) {
+    syncStatus(t('syncNeedUrlPass'), 'bad');
+    return;
+  }
+  syncStatus(t('syncWorking'));
+  const res = await sync.pull(cfg, cfg.passphrase);
+  if (!res.ok) {
+    syncStatus(
+      res.status === 404 ? t('syncNothing') : t('syncFail', { err: res.error ?? `HTTP ${res.status}` }),
+      res.status === 404 ? '' : 'bad',
+    );
+    return;
+  }
+  // The payload came from our own encrypted blob, but validate it like a
+  // backup anyway — never trust data, even your own.
+  const result = importData(
+    JSON.stringify({ format: 'chat-launcher-backup', version: 1, ...res.payload }),
+  );
+  if (!result.ok) {
+    syncStatus(t('syncFail', { err: result.error }), 'bad');
+    return;
+  }
+  const added = mergeRemote(result, { history, templates, lists });
+  if (result.settings) {
+    settings = { ...settings, ...result.settings };
+    saveSettings();
+    applyTheme();
+    applyAccent();
+    applyTextScale();
+    applyContrast();
+  }
+  renderTiles();
+  renderHistory();
+  renderTemplateList();
+  renderListList();
+  syncCfg.lastSync = Date.now();
+  saveSyncCfg();
+  syncStatus(t('syncMerged', { n: added.history }), 'good');
+});
+
+['syncUrl', 'syncUser', 'syncPass', 'syncPhrase'].forEach((id) => {
+  $(`#${id}`)?.addEventListener('change', readSyncInputs);
+});
+
+/* ----------------------------------------------------------- templates UI */
+
+let editingTemplateId = null;
+
+function openTemplateEditor(id = null) {
+  editingTemplateId = id;
+  const dlg = $('#templateDialog');
+  const tpl = id ? templates.list().find((x) => x.id === id) : null;
+  $('#templateName').value = tpl?.name ?? '';
+  $('#templateText').value = tpl?.text ?? '';
+  $('#templateDelete').hidden = !tpl;
+  dlg.showModal();
+  $('#templateName').focus();
+}
+
+$('#templateNew')?.addEventListener('click', () => openTemplateEditor());
+$('#templateClose')?.addEventListener('click', () => $('#templateDialog').close());
+$('#templateCancel')?.addEventListener('click', () => $('#templateDialog').close());
+$('#templateDelete')?.addEventListener('click', () => {
+  if (editingTemplateId) templates.remove(editingTemplateId);
+  $('#templateDialog').close();
+  renderTemplateList();
+  renderTemplateChips();
+});
+$('#templateForm')?.addEventListener('submit', (e) => {
+  e.preventDefault();
+  templates.save({
+    id: editingTemplateId ?? undefined,
+    name: $('#templateName').value,
+    text: $('#templateText').value,
+  });
+  $('#templateDialog').close();
+  renderTemplateList();
+  renderTemplateChips();
+  toast(t('savedToast'), { kind: 'good' });
+});
+
+/** Chips above the message field: one tap inserts a template. */
+function renderTemplateChips() {
+  const wrap = $('#templateChips');
+  if (!wrap) return;
+  const items = templates.list();
+  wrap.hidden = items.length === 0;
+  wrap.replaceChildren(
+    ...items.slice(0, 6).map((tpl) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'ghost-btn ripple template-chip';
+      b.textContent = tpl.name;
+      b.title = tpl.text.slice(0, 80);
+      b.addEventListener('click', () => {
+        const row = $('#messageRow');
+        if (!row.classList.contains('open')) msgToggle.click();
+        msgInput.value = tpl.text.slice(0, 300);
+        state.message = msgInput.value;
+        msgInput.focus();
+      });
+      return b;
+    }),
+  );
+}
+
+/* ---------------------------------------------------------- lists UI ----- */
+
+let openListId = null;
+
+function openListEditor(id) {
+  openListId = id;
+  const l = lists.get(id);
+  if (!l) return;
+  $('#listsTitle').textContent = l.name;
+  renderListItems(l);
+  $('#listsDialog').showModal();
+}
+
+$('#listNew')?.addEventListener('click', async () => {
+  const name = await askText({ title: t('listNew'), placeholder: t('listsTitle') });
+  if (name === null || !name.trim()) return;
+  const created = lists.create(name);
+  if (!created) {
+    toast(t('listsCap'), { kind: 'warn' });
+    return;
+  }
+  renderListList();
+  openListEditor(created.id);
+});
+
+$('#listsClose')?.addEventListener('click', () => $('#listsDialog').close());
+$('#listDelete')?.addEventListener('click', () => {
+  if (openListId) {
+    lists.remove(openListId);
+    renderListList();
+  }
+  $('#listsDialog').close();
+});
+
+function renderListItems(l) {
+  const wrap = $('#listItems');
+  wrap.replaceChildren(
+    ...l.items.map((it) =>
+      manageRow(it.label || `+${it.e164}`, formatDisplay(it.e164), [
+        ['✕', () => {
+          lists.removeItem(l.id, it.e164);
+          renderListItems(lists.get(l.id));
+          renderListList();
+        }],
+      ]),
+    ),
+  );
+  if (!l.items.length) {
+    const p = document.createElement('p');
+    p.className = 'manage-empty';
+    p.textContent = t('listEmpty');
+    wrap.replaceChildren(p);
+  }
+}
+
+$('#listAddForm')?.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const input = $('#listAddInput');
+  const members = parseMembers(input.value);
+  if (!members.length) {
+    toast(t('bulkNoneValid'), { kind: 'warn' });
+    return;
+  }
+  for (const m of members) lists.addItem(openListId, m);
+  input.value = '';
+  renderListItems(lists.get(openListId));
+  renderListList();
+});
+
+$('#listExport')?.addEventListener('click', () => {
+  const l = lists.get(openListId);
+  if (!l) return;
+  const csv = toCsv([
+    ['name', 'number'],
+    ...l.items.map((it) => [it.label, `+${it.e164}`]),
+  ]);
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${l.name.replace(/[^\w-]+/g, '_')}.csv`;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+});
+
+$('#listImport')?.addEventListener('click', () => $('#csvFile').click());
+$('#csvFile')?.addEventListener('change', async (e) => {
+  const file = e.target.files?.[0];
+  e.target.value = '';
+  if (!file || !openListId) return;
+  try {
+    const rows = parseCsv(await file.text());
+    const members = parseMembers(rows.map((r) => r.join(',')).join('\n'));
+    for (const m of members) lists.addItem(openListId, m);
+    renderListItems(lists.get(openListId));
+    renderListList();
+    toast(t('listImported', { n: members.length }), { kind: 'good' });
+  } catch {
+    toast(t('backupFail'), { kind: 'warn' });
+  }
+});
+
+$('#listLaunchAll')?.addEventListener('click', () => {
+  const l = lists.get(openListId);
+  if (!l?.items.length) return;
+  $('#listsDialog').close();
+  const app = (state.defaultApp && getApp(state.defaultApp)) || orderedApps()[0];
+  if (!app) return;
+  let blocked = 0;
+  l.items.forEach((it, i) => {
+    setTimeout(() => {
+      const win = launchNumber(app, it.e164);
+      if (win === false) blocked++;
+    }, i * 400);
+  });
+  toast(t('bulkRowsReady', { n: l.items.length }));
+});
+
+/* ------------------------------------------------------- schedule a chat */
+
+let scheduleAppId = null;
+
+$('#scheduleOpen')?.addEventListener('click', () => {
+  const e164 = currentE164();
+  if (!e164) {
+    toast(t('enterValid'), { kind: 'warn' });
+    return;
+  }
+  scheduleAppId = state.defaultApp ?? orderedApps()[0]?.id ?? null;
+  const app = getApp(scheduleAppId);
+  $('#appPickDialog').close();
+  $('#scheduleSummary').textContent = t('scheduleSummary', {
+    number: `+${e164}`,
+    app: app?.name ?? '',
+  });
+  // Default to 30 minutes from now, in local time, minute precision.
+  const when = new Date(Date.now() + 30 * 60000);
+  const local = new Date(when.getTime() - when.getTimezoneOffset() * 60000);
+  $('#scheduleAt').value = local.toISOString().slice(0, 16);
+  $('#scheduleAt').min = local.toISOString().slice(0, 16);
+  $('#scheduleDialog').showModal();
+});
+$('#scheduleClose')?.addEventListener('click', () => $('#scheduleDialog').close());
+$('#scheduleCancel')?.addEventListener('click', () => $('#scheduleDialog').close());
+$('#scheduleForm')?.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const e164 = currentE164();
+  const when = new Date($('#scheduleAt').value);
+  if (!e164 || Number.isNaN(when.getTime())) return;
+  const seconds = Math.max(60, Math.round((when.getTime() - Date.now()) / 1000));
+  const app = getApp(scheduleAppId) ?? orderedApps()[0];
+  const url = app ? app.buildUrl(e164, app.supportsMessage ? state.message : '') : shareUrl(e164);
+  const shell = window.ReactNativeWebView;
+  if (scheduleInShell(seconds, e164, url)) {
+    toast(t('scheduledToast'), { kind: 'good' });
+  } else {
+    toast(t('scheduleNeedApp'), { kind: 'warn', timeout: 6000 });
+  }
+  $('#scheduleDialog').close();
+});
+
+/* -------------------------------------------------------------- scanner -- */
+
+let scannerStream = null;
+let scannerTimer = null;
+
+/** Extract a phone number from scanned content: URLs, tel:, vCards, digits. */
+function numberFromScan(raw) {
+  const text = String(raw ?? '').trim();
+  if (!text) return null;
+  const urlMatch = text.match(/[?&](?:number|text)=(?:\+?\d[\d\s\-().]{5,20})/);
+  if (urlMatch) {
+    const parsed = parsePaste(decodeURIComponent(urlMatch[1]));
+    if (parsed) return parsed;
+  }
+  const waMatch = text.match(/wa\.me\/(\+?\d{7,15})|api\.whatsapp\.com\/send\?phone=(\+?\d{7,15})/i);
+  if (waMatch) {
+    const parsed = parsePaste(waMatch[1] ?? waMatch[2]);
+    if (parsed) return parsed;
+  }
+  const telMatch = text.match(/^(?:tel|smsto):(\+?\d[\d\s\-().]{5,20})/im);
+  if (telMatch) {
+    const parsed = parsePaste(telMatch[1]);
+    if (parsed) return parsed;
+  }
+  const vcard = text.match(/TEL[;^:]*(?:TYPE=[^:]*:)?:?\s*(\+?\d[\d\s\-().]{5,20})/im);
+  if (vcard) {
+    const parsed = parsePaste(vcard[1]);
+    if (parsed) return parsed;
+  }
+  return parsePaste(text);
+}
+
+function stopScanner() {
+  if (scannerTimer) {
+    clearInterval(scannerTimer);
+    scannerTimer = null;
+  }
+  scannerStream?.getTracks().forEach((track) => track.stop());
+  scannerStream = null;
+}
+
+async function startScannerCamera() {
+  const video = $('#scannerVideo');
+  if (!('BarcodeDetector' in window)) {
+    $('#scannerUnsupported').hidden = false;
+    return;
+  }
+  try {
+    scannerStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment' },
+      audio: false,
+    });
+    video.srcObject = scannerStream;
+    await video.play().catch(() => {});
+    const formats = await window.BarcodeDetector.getSupportedFormats();
+    const wanted = ['qr_code', 'code_128', 'ean_13', 'data_matrix', 'code_39'].filter((f) =>
+      formats.includes(f),
+    );
+    const detector = new window.BarcodeDetector(wanted.length ? { formats: wanted } : undefined);
+    scannerTimer = setInterval(async () => {
+      if (!scannerStream) return;
+      try {
+        const codes = await detector.detect(video);
+        if (codes.length) {
+          const parsed = numberFromScan(codes[0].rawValue);
+          if (parsed) {
+            stopScanner();
+            $('#scannerDialog').close();
+            state.iso = parsed.iso;
+            saveCountry();
+            updateCountryChip();
+            setNational(parsed.national);
+            phoneInput.focus();
+            toast(t('countryDetected', { flag: flagOf(parsed.iso), country: countryByIso(parsed.iso)?.name }));
+          }
+        }
+      } catch {
+        /* frame not ready — keep scanning */
+      }
+    }, 350);
+  } catch {
+    $('#scannerUnsupported').hidden = false;
+    toast(t('cameraBlocked'), { kind: 'warn' });
+  }
+}
+
+$('#scanBtn')?.addEventListener('click', () => {
+  const supported = 'BarcodeDetector' in window;
+  $('#scannerUnsupported').hidden = supported;
+  $('#scannerActions').hidden = supported;
+  $('#scannerDialog').showModal();
+  if (supported) startScannerCamera();
+});
+$('#scannerClose')?.addEventListener('click', () => {
+  stopScanner();
+  $('#scannerDialog').close();
+});
+$('#scannerStart')?.addEventListener('click', () => {
+  $('#scannerActions').hidden = true;
+  startScannerCamera();
+});
+
+/* ------------------------------------------------------ command palette -- */
+
+let paletteItems = [];
+let paletteActive = 0;
+
+function buildPaletteItems(q) {
+  const query = q.trim().toLowerCase();
+  const match = (s) => !query || s.toLowerCase().includes(query);
+  const items = [];
+  const e164 = currentE164();
+
+  for (const app of orderedApps()) {
+    items.push({
+      icon: app.icon,
+      label: e164 ? `${t('launchTitle2')} ${app.name}` : `${app.name}`,
+      hint: e164 ? `+${e164}` : t('paletteNoNumber'),
+      run: () => launch(app),
+      when: match(app.name),
+    });
+  }
+  const actions = [
+    { icon: '⌨', label: t('dialpad'), run: () => toggleDialPad() },
+    { icon: '📋', label: t('copy'), run: () => $('#copyBtn').click() },
+    { icon: '🔗', label: t('qr'), run: () => $('#qrBtn').click() },
+    { icon: '📷', label: t('scan'), run: () => $('#scanBtn').click() },
+    { icon: '☰', label: t('bulk'), run: () => $('#bulkBtn').click() },
+    { icon: '⚙', label: t('settings'), run: () => $('#settingsOpen').click() },
+    { icon: '📊', label: t('usage'), run: () => $('#usageOpen').click() },
+    { icon: '🎨', label: t('helpTheme'), run: () => cycleTheme() },
+    { icon: '🔠', label: t('textSize'), run: () => {
+      settings.textScale = settings.textScale === 'large' ? 'normal' : 'large';
+      saveSettings();
+      withViewTransition(applyTextScale);
+    } },
+    { icon: '◐', label: t('highContrast'), run: () => {
+      settings.contrast = settings.contrast === 'high' ? 'normal' : 'high';
+      saveSettings();
+      withViewTransition(applyContrast);
+    } },
+    { icon: '⏰', label: t('scheduleOpen'), run: () => {
+      closeMenus();
+      $('#scheduleOpen').click();
+    }, when: !!e164 },
+    { icon: '⬇', label: t('backupExport'), run: () => $('#exportBtn').click() },
+  ];
+  for (const a of actions) {
+    if (a.when === false) continue;
+    items.push({ ...a, when: match(a.label) });
+  }
+  for (const code of availableLangs) {
+    items.push({
+      icon: '🌐',
+      label: `${t('language')}: ${LANG_LABELS[code] ?? code}`,
+      hint: code,
+      run: () => switchLang(code),
+      when: match(`${LANG_LABELS[code] ?? code} ${t('language')}`),
+    });
+  }
+  for (const entry of history.list().slice(0, 15)) {
+    items.push({
+      icon: '🕘',
+      label: entry.label || formatDisplay(entry.e164),
+      hint: `+${entry.e164}`,
+      run: () => {
+        const c = countryForE164(entry.e164);
+        if (c) {
+          state.iso = c.iso;
+          saveCountry();
+          updateCountryChip();
+        }
+        setNational(entry.e164.slice(c ? c.dial.length : 0));
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      },
+      when: match(`${entry.label ?? ''} ${entry.e164}`),
+    });
+  }
+  for (const tpl of templates.list().slice(0, 8)) {
+    items.push({
+      icon: '✉',
+      label: `${t('paletteInsertTemplate')}: ${tpl.name}`,
+      hint: tpl.text.slice(0, 40),
+      run: () => {
+        const row = $('#messageRow');
+        if (!row.classList.contains('open')) msgToggle.click();
+        msgInput.value = tpl.text.slice(0, 300);
+        state.message = msgInput.value;
+      },
+      when: match(tpl.name),
+    });
+  }
+  for (const l of lists.list()) {
+    items.push({
+      icon: '📢',
+      label: `${t('listsLabel')}: ${l.name}`,
+      hint: t('listCount', { n: l.items.length }),
+      run: () => {
+        renderListList();
+        openListEditor(l.id);
+      },
+      when: match(l.name),
+    });
+  }
+  return items.filter((it) => it.when);
+}
+
+function renderPalette() {
+  const input = $('#paletteInput');
+  const list = $('#paletteList');
+  paletteItems = buildPaletteItems(input.value);
+  paletteActive = Math.min(paletteActive, Math.max(0, paletteItems.length - 1));
+  list.replaceChildren(
+    ...paletteItems.map((item, i) => {
+      const li = document.createElement('li');
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'palette-item' + (i === paletteActive ? ' active' : '');
+      btn.setAttribute('role', 'option');
+      const icon = document.createElement('span');
+      icon.className = 'palette-icon';
+      icon.innerHTML = item.icon;
+      const label = document.createElement('span');
+      label.textContent = item.label;
+      btn.append(icon, label);
+      if (item.hint) {
+        const hint = document.createElement('small');
+        hint.textContent = item.hint;
+        btn.append(hint);
+      }
+      btn.addEventListener('click', () => runPaletteItem(i));
+      li.append(btn);
+      return li;
+    }),
+  );
+  if (!paletteItems.length) {
+    const empty = document.createElement('li');
+    empty.className = 'palette-empty';
+    empty.textContent = t('paletteEmpty');
+    list.replaceChildren(empty);
+  }
+  list.querySelector('.palette-item.active')?.scrollIntoView({ block: 'nearest' });
+}
+
+function runPaletteItem(i) {
+  const item = paletteItems[i];
+  if (!item) return;
+  $('#paletteDialog').close();
+  item.run();
+}
+
+function openPalette() {
+  paletteActive = 0;
+  $('#paletteInput').value = '';
+  renderPalette();
+  $('#paletteDialog').showModal();
+  $('#paletteInput').focus();
+}
+
+$('#paletteOpen')?.addEventListener('click', openPalette);
+$('#paletteClose')?.addEventListener('click', () => $('#paletteDialog').close());
+$('#paletteInput')?.addEventListener('input', () => {
+  paletteActive = 0;
+  renderPalette();
+});
+$('#paletteInput')?.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    paletteActive = Math.min(paletteActive + 1, paletteItems.length - 1);
+    renderPalette();
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    paletteActive = Math.max(paletteActive - 1, 0);
+    renderPalette();
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    runPaletteItem(paletteActive);
+  }
+});
 
 function moveTile(id, delta) {
   const all = [...settings.order, ...DEFAULT_ORDER.filter((x) => !settings.order.includes(x))];
@@ -1069,18 +1879,25 @@ $('#clearDataBtn').addEventListener('click', async () => {
   if (sure === 'DELETE') {
     history.clear();
     stats.clear();
+    templates.clear();
+    lists.clear();
     try {
       storage.removeItem(SETTINGS_KEY);
+      storage.removeItem(SYNC_CFG_KEY);
     } catch {
       /* ignore */
     }
+    syncCfg = loadSyncCfg();
     settings = loadSettings();
     state.iso = settings.country ?? detectCountryIso() ?? 'US';
     renderTiles();
     renderHistory();
+    renderTemplateChips();
     updateCountryChip();
     applyTheme();
     applyAccent();
+    applyTextScale();
+    applyContrast();
     settingsDialog.close();
     toast(t('wiped'), { kind: 'good' });
   } else if (sure !== null) {
@@ -1097,7 +1914,13 @@ $('#historySearch')?.addEventListener('input', (e) => {
 
 $('#exportBtn')?.addEventListener('click', () => {
   try {
-    const json = exportData({ settings, history: history.list(), stats: stats.get() });
+    const json = exportData({
+      settings,
+      history: history.list(),
+      stats: stats.get(),
+      templates: templates.list(),
+      lists: lists.list(),
+    });
     const blob = new Blob([json], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -1130,13 +1953,18 @@ $('#importFile')?.addEventListener('change', async (e) => {
       saveSettings();
       applyTheme();
       applyAccent();
+      applyTextScale();
+      applyContrast();
     }
     history.replaceAll(result.history);
     if (result.stats) stats.replace(result.stats);
+    templates.replaceAll(result.templates ?? []);
+    lists.replaceAll(result.lists ?? []);
     if (settings.country) state.iso = settings.country;
     updateCountryChip();
     renderTiles();
     renderHistory();
+    renderTemplateChips();
     renderSettings();
     toast(t('backupImported', { n: result.history.length }), { kind: 'good' });
   } catch {
@@ -1243,8 +2071,9 @@ $('#helpClose').addEventListener('click', () => $('#helpDialog').close());
 
 /* ---------------------------------------------------- shell bridge (#10) */
 
-// The Android/iOS shell can push a number picked from the native contact
-// picker. Only trusted when we're actually running inside the shell.
+// The Android/iOS shell pushes numbers picked from the native contact picker,
+// text shared into the app, and scheduled-send requests come back the other
+// way. Only trusted when we're actually running inside the shell.
 window.addEventListener('message', (e) => {
   if (!window.ReactNativeWebView) return; // not inside the shell
   let data = e.data;
@@ -1255,20 +2084,62 @@ window.addEventListener('message', (e) => {
       return;
     }
   }
-  if (!data || data.type !== 'chatlauncher-contact') return;
-  const raw = String(data.number ?? '');
-  if (!/^\+?\d{7,15}$/.test(raw)) return;
-  const parsed = parsePaste(raw.startsWith('+') ? raw : `+${raw}`);
-  if (parsed) {
-    state.iso = parsed.iso;
-    saveCountry();
-    updateCountryChip();
-    setNational(parsed.national);
-  } else {
-    setNational(raw);
+  if (!data || typeof data !== 'object') return;
+
+  if (data.type === 'chatlauncher-contact') {
+    const raw = String(data.number ?? '');
+    if (!/^\+?\d{7,15}$/.test(raw)) return;
+    const parsed = parsePaste(raw.startsWith('+') ? raw : `+${raw}`);
+    if (parsed) {
+      state.iso = parsed.iso;
+      saveCountry();
+      updateCountryChip();
+      setNational(parsed.national);
+    } else {
+      setNational(raw);
+    }
+    // Photo thumbnails ride along (validated by history.setAvatar).
+    const e164 = currentE164();
+    if (e164 && typeof data.avatar === 'string') history.setAvatar(e164, data.avatar);
+    if (e164 && typeof data.name === 'string' && data.name.trim() && data.name.length <= 40) {
+      history.renameLabel(e164, data.name.trim());
+      renderHistory();
+    }
+    phoneInput.focus();
+    return;
   }
-  phoneInput.focus();
+
+  if (data.type === 'chatlauncher-share') {
+    // Shared into the shell from another app: mine the first number.
+    const text = String(data.text ?? '');
+    const mined = text.match(/\+?\d[\d\s\-().]{6,18}\d/);
+    const candidate = mined?.[0] ?? '';
+    if (!candidate) {
+      toast(t('bulkNoneValid'), { kind: 'warn' });
+      return;
+    }
+    const parsed = parsePaste(candidate);
+    if (parsed) {
+      state.iso = parsed.iso;
+      saveCountry();
+      updateCountryChip();
+      setNational(parsed.national);
+      toast(t('countryDetected', { flag: flagOf(parsed.iso), country: countryByIso(parsed.iso)?.name }));
+    } else {
+      setNational(candidate);
+    }
+    phoneInput.focus();
+    return;
+  }
 });
+
+/** Ask the shell to schedule a notification (Android shell only). */
+function scheduleInShell(seconds, e164, url) {
+  const shell = window.ReactNativeWebView;
+  if (!shell?.postMessage) return false;
+  shell.postMessage(JSON.stringify({ type: 'chatlauncher-schedule', seconds, number: e164, url }));
+  return true;
+}
 
 /* --------------------------------------------------------------- shortcuts */
 
@@ -1277,14 +2148,28 @@ document.addEventListener('keydown', (e) => {
   const typing =
     el instanceof HTMLElement &&
     (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
+  // Inside any open dialog, let native handling win (forms, Escape…).
+  if (e.target instanceof HTMLElement && e.target.closest('dialog[open]')) {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+      e.preventDefault();
+      const dlg = document.querySelector('dialog[open]');
+      dlg?.close();
+      openPalette();
+    }
+    return;
+  }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+    e.preventDefault();
+    openPalette();
+    return;
+  }
   if (typing) {
-    if (e.key === 'Enter' && el !== msgInput) {
+    if (e.key === 'Enter' && el === phoneInput) {
       e.preventDefault();
       launchDefault();
     }
     return;
   }
-  if (e.target instanceof HTMLElement && e.target.closest('dialog[open]')) return;
   if ((e.ctrlKey || e.metaKey) && /^[1-9]$/.test(e.key)) {
     e.preventDefault();
     launchByIndex(Number(e.key) - 1);
@@ -1416,6 +2301,8 @@ function init() {
   if (!storageOk) warnStorageOnce();
   applyTheme();
   applyAccent();
+  applyTextScale();
+  applyContrast();
   applyStaticTranslations();
   systemDark.addEventListener('change', () => {
     if (settings.theme === 'system') applyTheme();
@@ -1424,8 +2311,10 @@ function init() {
   updateCountryChip();
   renderTiles();
   renderHistory();
+  renderTemplateChips();
   consumeParams();
   updateValidity();
+  updateSuggestion();
   registerServiceWorker();
   if (!('ontouchstart' in window)) phoneInput.focus();
   // A number queued offline last session can be opened now.

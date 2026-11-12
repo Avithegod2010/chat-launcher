@@ -13,10 +13,21 @@
       "autoIncrement": true,
       "android": {
         "buildType": "app-bundle"
+      },
+      "ios": {
+        "autoIncrement": true,
+        "image": "latest"
       }
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "android": {},
+      "ios": {
+        "appleId": "${env.APPLE_ID}",
+        "ascAppId": "${env.ASC_APP_ID}",
+        "appleTeamId": "${env.APPLE_TEAM_ID}"
+      }
+    }
   }
 }

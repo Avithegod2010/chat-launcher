@@ -1,43 +1,43 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { availableLangs, t } from '../js/i18n.js';
+import { STRINGS, availableLangs, t } from '../js/i18n.js';
 
-test('en and hi expose the same key sets', () => {
-  // t() falls back to en, so a missing hi key would silently show English —
-  // this test keeps the two tables honest against each other.
-  const enCounts = countKeys('en');
-  const hiCounts = countKeys('hi');
-  assert.deepEqual(Object.keys(enCounts).sort(), Object.keys(hiCounts).sort());
+test('every language exposes exactly the en key set', () => {
+  // t() falls back to en, so a missing key would silently show English —
+  // this keeps every table honest against the source of truth.
+  const enKeys = Object.keys(STRINGS.en).sort();
+  assert.ok(enKeys.length > 150, `en table looks complete (${enKeys.length} keys)`);
+  for (const lang of availableLangs) {
+    const keys = Object.keys(STRINGS[lang]).sort();
+    assert.deepEqual(keys, enKeys, `${lang} key set matches en`);
+    for (const k of keys) {
+      assert.equal(typeof STRINGS[lang][k], 'string', `${lang}.${k} is a string`);
+      assert.ok(STRINGS[lang][k].length > 0, `${lang}.${k} is non-empty`);
+    }
+  }
 });
 
-function countKeys(lang) {
-  // reach into the module's table via t(): every key in en must resolve in hi
-  // and vice versa. We can't enumerate keys directly, so we spot-check the
-  // full known list from the source.
-  const known = [
-    'tagline', 'install', 'placeholder', 'addMessage', 'removeMessage', 'messageHint',
-    'messagePlaceholder', 'copy', 'dialpad', 'bulk', 'qr', 'launchTitle', 'historyTitle',
-    'clearAll', 'reallyClear', 'historyEmpty', 'historyEmpty2', 'looksGood', 'keepTyping',
-    'digitsSoFar', 'numberShort', 'numberLong', 'enterValid', 'copied', 'clipboardBlocked',
-    'clipboardUnavailable', 'countryDetected', 'launchTitle2', 'settings', 'theme',
-    'system', 'light', 'dark', 'language', 'accent', 'tiles', 'usage', 'wipeData',
-    'typeDelete', 'wipe', 'wiped', 'nothingDeleted', 'dataOnDevice', 'storageBlocked',
-    'helpTitle', 'close', 'rename', 'addNote', 'editNote', 'notePlaceholder', 'save',
-    'cancel', 'pin', 'unpin', 'copyNumber', 'shareLink', 'delete', 'bulkTitle',
-    'bulkPlaceholder', 'bulkParse', 'bulkOpenAll', 'bulkBlockedPopup', 'bulkNoneValid',
-    'bulkRowsReady', 'qrTitle', 'qrHint', 'updateReady', 'refresh', 'themeNow',
-    'installed', 'offlineFail', 'usageTotal', 'usageMonth', 'usageTop', 'usageNone',
-    'whatsappDesktop', 'appName', 'helpFocus', 'helpEnter', 'helpCtrl', 'helpTheme',
-    'helpPad', 'helpHelp', 'helpNote', 'searchHistory', 'importContacts', 'setDefaultApp',
-    'defaultAppTitle', 'none', 'backupExport', 'backupImport', 'backupDone', 'backupFail',
-    'backupImported', 'contactsImported', 'unusualLength', 'openAnyway', 'accentCustom',
-    'errorToast', 'reload', 'queuedOffline', 'queuedLaunch', 'queueBackOnline',
+test('all 12 languages are registered', () => {
+  assert.deepEqual(
+    [...availableLangs].sort(),
+    ['ar', 'bn', 'de', 'en', 'es', 'fr', 'hi', 'ja', 'mr', 'pt', 'ru', 'ta'],
+  );
+});
+
+test('placeholders survive every translation', () => {
+  // {vars} are interpolated positionally — every table must keep them.
+  const withVars = [
+    'numberShort', 'numberLong', 'countryDetected', 'bulkBlockedPopup', 'usageTotal',
+    'usageMonth', 'backupImported', 'contactsImported', 'unusualLength', 'themeNow',
+    'listCount', 'listImported', 'syncMerged', 'syncFail', 'syncLast', 'scheduleSummary',
   ];
-  const out = {};
-  for (const k of known) out[k] = k;
-  assert.deepEqual(availableLangs.sort(), ['ar', 'bn', 'en', 'es', 'hi', 'mr', 'ta']);
-  return out;
-}
+  for (const lang of availableLangs) {
+    for (const key of withVars) {
+      const s = STRINGS[lang][key];
+      assert.match(s, /\{\w+\}/, `${lang}.${key} keeps at least one {var}`);
+    }
+  }
+});
 
 test('t() interpolates variables', () => {
   const s = t('numberShort', { n: 10, country: 'India', typed: 7 });

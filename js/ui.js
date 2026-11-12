@@ -146,6 +146,72 @@ export function vibrate(ms = 8) {
   }
 }
 
+/**
+ * Run a DOM change inside a View Transition when the browser supports it and
+ * the user hasn't asked for reduced motion; otherwise apply it directly.
+ * @param {() => void} fn
+ */
+export function withViewTransition(fn) {
+  if (typeof document.startViewTransition === 'function' && !prefersReducedMotion()) {
+    document.startViewTransition(fn);
+  } else {
+    fn();
+  }
+}
+
+/**
+ * Drag-to-dismiss for the bottom sheet: attaches pointer handling to the
+ * sheet's grab handle and translates the sheet while dragging; past the
+ * threshold (or on a fast flick) it calls onDismiss and restores the transform.
+ * @param {HTMLElement} sheet the `.sheet` element
+ * @param {{onDismiss?: () => void, threshold?: number}} [opts]
+ */
+export function attachSheetDrag(sheet, opts = {}) {
+  const handle = sheet.querySelector('.sheet-grab');
+  if (!handle) return undefined;
+  const threshold = opts.threshold ?? 96;
+  let startY = 0;
+  let dy = 0;
+  let dragging = false;
+  let started = false;
+
+  const onDown = (e) => {
+    if (prefersReducedMotion()) return;
+    dragging = true;
+    started = false;
+    startY = e.clientY;
+    dy = 0;
+    handle.setPointerCapture?.(e.pointerId);
+  };
+  const onMove = (e) => {
+    if (!dragging) return;
+    dy = Math.max(0, e.clientY - startY);
+    if (!started && dy > 6) {
+      started = true;
+      sheet.classList.add('dragging');
+    }
+    if (started) sheet.style.transform = `translateY(${dy}px)`;
+  };
+  const onUp = () => {
+    if (!dragging) return;
+    dragging = false;
+    sheet.classList.remove('dragging');
+    sheet.style.transform = '';
+    if (started && (dy > threshold || dy > 40)) opts.onDismiss?.();
+  };
+
+  handle.addEventListener('pointerdown', onDown);
+  handle.addEventListener('pointermove', onMove);
+  handle.addEventListener('pointerup', onUp);
+  handle.addEventListener('pointercancel', onUp);
+  return () => {
+    handle.removeEventListener('pointerdown', onDown);
+    handle.removeEventListener('pointermove', onMove);
+    handle.removeEventListener('pointerup', onUp);
+    handle.removeEventListener('pointercancel', onUp);
+  };
+}
+
 /** @param {string} id of a <dialog> element */
 export function openDialog(id) {
   const d = document.getElementById(id);
