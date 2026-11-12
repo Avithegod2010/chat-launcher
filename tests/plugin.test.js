@@ -1,13 +1,16 @@
 /**
- * Regression tests for the Expo shortcuts config plugin: AAPT requires
+ * Regression tests for the Android shortcut XML generators: AAPT requires
  * shortcut labels to be @string references (literal text fails the build).
+ *
+ * Imports the pure generator module (no `expo` dependency), so these tests
+ * run in the repo-root CI job without expo-app's node_modules.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const plugin = require('../expo-app/plugins/shortcuts-plugin.js');
+const plugin = require('../expo-app/plugins/shortcuts-xml.js');
 
 test('shortcuts.xml references string resources, never literals', () => {
   const xml = plugin.shortcutsXml();
