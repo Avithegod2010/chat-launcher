@@ -24,6 +24,11 @@ cargo tauri build                # bundle (nsis/dmg/appimage)
 > config targets Tauri v2; `tauri.conf.json` pins the remote URL and a
 > capability file allows it to talk to the network.
 
+> Updater: `tauri-plugin-updater` is registered but dormant. The minimal
+> `plugins.updater` section in `tauri.conf.json` (empty `pubkey`, no
+> endpoints) is required for the plugin to initialize at startup. Fill in a
+> real `pubkey` + `endpoints` when desktop auto-update is actually shipped.
+
 ## Why not Electron?
 
 Electron ships a whole Chromium (~150 MB); Tauri uses the OS webview, so the

@@ -25,6 +25,11 @@
       "capabilities": ["default"]
     }
   },
+  "plugins": {
+    "updater": {
+      "pubkey": ""
+    }
+  },
   "bundle": {
     "active": true,
     "targets": ["nsis", "dmg", "appimage"],
