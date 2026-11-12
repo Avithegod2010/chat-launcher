@@ -3,10 +3,16 @@
  *
  * Adds long-press launcher shortcuts (WhatsApp / Telegram / SMS) that open
  * the shell with ?app=<id> preselected. Static shortcuts suit this app —
- * truly dynamic shortcuts (from history) would need a native module.
+ * truly dynamic shortcuts (from history) are set at runtime through
+ * expo-quick-actions instead.
+ *
+ * Implementation note: this runs entirely in a dangerous mod and edits the
+ * generated AndroidManifest.xml textually. In this Expo version the
+ * dangerous mod executes before withAndroidManifest actions, so the usual
+ * in-memory manifest edit would never be serialized.
  */
-const { withAndroidManifest, withDangerousMod } = require('expo/config-plugins');
-const { mkdir, writeFile } = require('node:fs/promises');
+const { withDangerousMod } = require('expo/config-plugins');
+const { mkdir, readFile, writeFile } = require('node:fs/promises');
 const { join } = require('node:path');
 
 const SHORTCUTS = [
@@ -14,6 +20,9 @@ const SHORTCUTS = [
   { label: 'Telegram', url: 'https://avithegod2010.github.io/chat-launcher/?app=telegram' },
   { label: 'SMS', url: 'https://avithegod2010.github.io/chat-launcher/?app=sms' },
 ];
+
+const MANIFEST_ENTRY =
+  '    <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts"/>\n';
 
 /** Build res/xml/shortcuts.xml content. */
 function shortcutsXml() {
@@ -36,29 +45,30 @@ ${items}
 `;
 }
 
-/** Inject the android.app.shortcuts meta-data reference into the manifest. */
-function addManifestMetaData(androidManifest) {
-  const app = androidManifest.manifest.application;
-  app.$['xmlns:android'] = 'http://schemas.android.com/apk/res/android';
-  app['meta-data'] = [].concat(app['meta-data'] || []).filter(
-    (m) => m?.$?.['android:name'] !== 'android.app.shortcuts',
-  );
-  app['meta-data'].push({
-    $: { 'android:name': 'android.app.shortcuts', 'android:resource': '@xml/shortcuts' },
-  });
-}
-
 module.exports = function withShortcuts(config) {
-  const withManifest = withAndroidManifest(config, (cfg) => {
-    addManifestMetaData(cfg.modResults);
-    return cfg;
-  });
-  return withDangerousMod(withManifest, [
+  return withDangerousMod(config, [
     'android',
     async (cfg) => {
-      const resDir = join(cfg.modRequest.platformProjectRoot, 'app', 'src', 'main', 'res', 'xml');
+      const projectRoot = cfg.modRequest.platformProjectRoot;
+
+      // 1. res/xml/shortcuts.xml
+      const resDir = join(projectRoot, 'app', 'src', 'main', 'res', 'xml');
       await mkdir(resDir, { recursive: true });
       await writeFile(join(resDir, 'shortcuts.xml'), shortcutsXml(), 'utf8');
+
+      // 2. <meta-data> reference inside the generated AndroidManifest.xml
+      const manifestPath = join(projectRoot, 'app', 'src', 'main', 'AndroidManifest.xml');
+      const text = await readFile(manifestPath, 'utf8');
+      if (!text.includes('android.app.shortcuts')) {
+        if (!text.includes('</application>')) {
+          throw new Error('[shortcuts-plugin] </application> not found in AndroidManifest.xml');
+        }
+        await writeFile(
+          manifestPath,
+          text.replace('</application>', `${MANIFEST_ENTRY}  </application>`),
+          'utf8',
+        );
+      }
       return cfg;
     },
   ]);
