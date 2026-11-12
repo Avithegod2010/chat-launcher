@@ -33,7 +33,7 @@ import {
   warnStorageOnce,
 } from './ui.js';
 
-const APP_VERSION = '1.3.0';
+const APP_VERSION = '1.3.1';
 const SETTINGS_KEY = 'chatlauncher:settings';
 const $ = (sel) => document.querySelector(sel);
 
@@ -932,22 +932,23 @@ function renderSettings() {
     };
     customInput.classList.toggle('active', settings.accent === 'custom');
   }
-  accentRow.replaceChildren(
-    ...Object.entries(ACCENTS).map(([name, [a, b]]) => {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'accent-swatch' + (settings.accent === name ? ' active' : '');
-      btn.style.background = `linear-gradient(135deg, ${a}, ${b})`;
-      btn.setAttribute('aria-label', `${t('accent')}: ${name}`);
-      btn.addEventListener('click', () => {
-        settings.accent = name;
-        saveSettings();
-        applyAccent();
-        renderSettings();
-      });
-      return btn;
-    }),
-  );
+  const accentSwatches = Object.entries(ACCENTS).map(([name, [a, b]]) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'accent-swatch' + (settings.accent === name ? ' active' : '');
+    btn.style.background = `linear-gradient(135deg, ${a}, ${b})`;
+    btn.setAttribute('aria-label', `${t('accent')}: ${name}`);
+    btn.addEventListener('click', () => {
+      settings.accent = name;
+      saveSettings();
+      applyAccent();
+      renderSettings();
+    });
+    return btn;
+  });
+  // The custom-color input lives in the same row; replaceChildren would detach
+  // it permanently, so re-append it after the preset swatches.
+  accentRow.replaceChildren(...accentSwatches, ...(customInput ? [customInput] : []));
 
   const list = $('#tileSettings');
   const all = [...settings.order, ...DEFAULT_ORDER.filter((id) => !settings.order.includes(id))];

@@ -22,7 +22,11 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           set -e
-          body=$(gh api "repos/${{ github.repository }}/releases/tags/$TAG" --jq .body || true)
+          # A missing release is normal on a tag push (GitHub creates releases
+          # later), so do not capture the API error body as release notes.
+          if ! body=$(gh api "repos/${{ github.repository }}/releases/tags/$TAG" --jq .body 2>/dev/null); then
+            body=""
+          fi
           if [ -z "$body" ]; then
             body=$(git tag -l --format='%(contents)' "$TAG")
           fi
@@ -30,12 +34,16 @@ jobs:
           if grep -qF "## [$TAG]" CHANGELOG.md 2>/dev/null; then
             echo "already recorded"; exit 0
           fi
+          # Keep everything before the first "## [" entry, insert the new entry,
+          # then keep the old entries. (Splitting on a fixed line number used to
+          # leave the previous version's heading above the new one.)
           {
-            head -n 6 CHANGELOG.md 2>/dev/null || printf '# Changelog\n\nAll notable changes to Chat Launcher. Newest first.\n\n'
+            awk '/^## \[/{exit} {print}' CHANGELOG.md 2>/dev/null ||
+              printf '# Changelog\n\nAll notable changes to Chat Launcher. Newest first.\n\n'
           } > /tmp/cl.md
           {
-            printf '\n## [%s] — %s\n\n%s\n' "$TAG" "$(date -u +%Y-%m-%d)" "$body"
-            tail -n +7 /tmp/cl.md 2>/dev/null || true
+            printf '## [%s] — %s\n\n%s\n\n' "$TAG" "$(date -u +%Y-%m-%d)" "$body"
+            awk 'seen{print} /^## \[/{seen=1; print}' CHANGELOG.md 2>/dev/null || true
           } >> /tmp/cl.md
           mv /tmp/cl.md CHANGELOG.md
           git config user.name "github-actions[bot]"

@@ -85,10 +85,15 @@ function inTriangle(px, py, [ax, ay], [bx, by], [cx, cy]) {
 
 /**
  * @param {number} size output square size in px
- * @param {{maskable?: boolean, bubbleScale?: number}} opts
+ * @param {{maskable?: boolean, bubbleScale?: number, background?: 'gradient'|'transparent', dots?: 'color'|'cutout'}} opts
  *   maskable → full-bleed opaque square (launcher applies its own mask)
+ *   background 'transparent' → glyph only (Android adaptive foreground)
+ *   dots 'cutout' → transparent dot holes so the gradient shows through
  */
-function renderIcon(size, { maskable = false, bubbleScale = 1 } = {}) {
+function renderIcon(
+  size,
+  { maskable = false, bubbleScale = 1, background = 'gradient', dots = 'color' } = {},
+) {
   const SS = 4; // supersampling factor
   const pixels = [];
   const r = maskable ? 0 : size * 0.22; // rounded corner radius
@@ -114,44 +119,73 @@ function renderIcon(size, { maskable = false, bubbleScale = 1 } = {}) {
           const px = x + (sx + 0.5) / SS;
           const py = y + (sy + 0.5) / SS;
           // background square (rounded unless maskable)
-          let bg;
-          if (maskable) {
-            bg = true;
-          } else {
-            const qx = Math.abs(px - cx) - (cx - r);
-            const qy = Math.abs(py - size / 2) - (size / 2 - r);
-            bg = Math.max(qx, qy) <= 0;
+          if (background === 'gradient') {
+            let bg;
+            if (maskable) {
+              bg = true;
+            } else {
+              // rounded-rect SDF: inner rect plus corner circles, not just the
+              // inner rect (which shrank the artwork to ~56% of the canvas)
+              const qx = Math.abs(px - cx) - (size / 2 - r);
+              const qy = Math.abs(py - size / 2) - (size / 2 - r);
+              bg = Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) <= r;
+            }
+            if (!bg) continue;
+            insideBg++;
           }
-          if (!bg) continue;
-          insideBg++;
           const bubble =
             (px - cx) * (px - cx) + (py - cy) * (py - cy) <= R * R ||
             inTriangle(px, py, ...tail);
           if (!bubble) continue;
           insideGlyph++;
           const dot =
-            (py - cy) * (py - cy) <= dotR * dotR &&
-            Math.abs(px - cx) >= dotDx - dotR &&
-            Math.abs(px - cx) <= dotDx + dotR;
+            (px - cx - dotDx) ** 2 + (py - cy) ** 2 <= dotR * dotR ||
+            (px - cx) ** 2 + (py - cy) ** 2 <= dotR * dotR ||
+            (px - cx + dotDx) ** 2 + (py - cy) ** 2 <= dotR * dotR;
           if (dot) insideDot++;
         }
       }
       const total = SS * SS;
       const bgA = insideBg / total;
+      const glyphA = insideGlyph / total;
       const dotA = insideDot / total; // dots drawn with bg color over white
       const bg = lerp(GRAD_TOP, GRAD_BOTTOM, y / size);
+      if (background === 'transparent' || dots === 'cutout') {
+        const a = glyphA - dotA;
+        row[x * 4] = WHITE[0];
+        row[x * 4 + 1] = WHITE[1];
+        row[x * 4 + 2] = WHITE[2];
+        row[x * 4 + 3] = Math.round(a * 255);
+        continue;
+      }
       if (bgA === 0) {
         row[x * 4 + 3] = 0;
         continue;
       }
-      // white glyph with bg-colored dots
-      const color = [0, 1, 2].map(
-        (i) => bg[i] * dotA + WHITE[i] * (insideGlyph / total - dotA),
-      );
+      // white glyph over the gradient; dots keep the background color
+      const whiteA = glyphA - dotA;
+      const color = [0, 1, 2].map((i) => bg[i] * (bgA - whiteA) + WHITE[i] * whiteA);
       row[x * 4] = Math.round(color[0]);
       row[x * 4 + 1] = Math.round(color[1]);
       row[x * 4 + 2] = Math.round(color[2]);
       row[x * 4 + 3] = Math.round(bgA * 255);
+    }
+    pixels.push(row);
+  }
+  return encodePng(size, size, pixels);
+}
+
+/** Full-bleed gradient square — Android adaptive-icon background layer. */
+function renderGradient(size) {
+  const pixels = [];
+  for (let y = 0; y < size; y++) {
+    const bg = lerp(GRAD_TOP, GRAD_BOTTOM, y / size);
+    const row = new Uint8Array(size * 4);
+    for (let x = 0; x < size; x++) {
+      row[x * 4] = Math.round(bg[0]);
+      row[x * 4 + 1] = Math.round(bg[1]);
+      row[x * 4 + 2] = Math.round(bg[2]);
+      row[x * 4 + 3] = 255;
     }
     pixels.push(row);
   }
@@ -175,4 +209,23 @@ const targets = [
 for (const [name, buf] of targets) {
   writeFileSync(join(OUT, name), buf);
   console.log(`✓ icons/${name} (${buf.length} bytes)`);
+}
+
+// The Expo shell ships the same artwork: a full icon, a gradient adaptive-icon
+// background layer, and a transparent foreground layer whose dots are holes so
+// the gradient shows through (matching the real logo).
+const SHELL = join(ROOT, 'expo-app', 'assets');
+mkdirSync(SHELL, { recursive: true });
+
+const shellTargets = [
+  ['icon.png', renderIcon(1024)],
+  ['splash-icon.png', renderIcon(1024)],
+  ['favicon.png', renderIcon(48)],
+  ['android-icon-background.png', renderGradient(1024)],
+  ['android-icon-foreground.png', renderIcon(1024, { background: 'transparent', dots: 'cutout' })],
+];
+
+for (const [name, buf] of shellTargets) {
+  writeFileSync(join(SHELL, name), buf);
+  console.log(`✓ expo-app/assets/${name} (${buf.length} bytes)`);
 }
