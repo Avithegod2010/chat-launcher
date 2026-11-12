@@ -14,6 +14,10 @@ import {
 import { checkNumber, digitsOnly, formatAsYouType, parsePaste, toE164 } from './phone.js';
 import { createHistory } from './history.js';
 import { createStats } from './stats.js';
+import { createQueue } from './queue.js';
+import { exportData, importData } from './backup.js';
+import { derivePair } from './colors.js';
+import { parseVcf } from './vcf.js';
 import { drawQr } from './qr.js';
 import { availableLangs, initLang, setLang, t } from './i18n.js';
 import {
@@ -29,7 +33,7 @@ import {
   warnStorageOnce,
 } from './ui.js';
 
-const APP_VERSION = '1.2.0';
+const APP_VERSION = '1.3.0';
 const SETTINGS_KEY = 'chatlauncher:settings';
 const $ = (sel) => document.querySelector(sel);
 
@@ -45,9 +49,10 @@ const ACCENTS = {
 const { ok: storageOk, backend: storage } = safeStorage();
 const history = createHistory(storage);
 const stats = createStats(storage);
+const queue = createQueue(storage);
 
 /** @type {{theme: string, country: string|null, order: string[],
- *          disabled: string[], accent: string}} */
+ *          disabled: string[], accent: string, accentCustom: string|null}} */
 let settings = loadSettings();
 
 const state = {
@@ -65,10 +70,11 @@ function loadSettings() {
       country: typeof raw.country === 'string' ? raw.country : null,
       order: Array.isArray(raw.order) ? raw.order.filter((id) => getApp(id)) : [...DEFAULT_ORDER],
       disabled: Array.isArray(raw.disabled) ? raw.disabled.filter((id) => getApp(id)) : [],
-      accent: ACCENTS[raw.accent] ? raw.accent : 'violet',
+      accent: ACCENTS[raw.accent] ? raw.accent : raw.accentCustom ? 'custom' : 'violet',
+      accentCustom: /^#[0-9a-f]{6}$/i.test(raw.accentCustom ?? '') ? raw.accentCustom : null,
     };
   } catch {
-    return { theme: 'system', country: null, order: [...DEFAULT_ORDER], disabled: [], accent: 'violet' };
+    return { theme: 'system', country: null, order: [...DEFAULT_ORDER], disabled: [], accent: 'violet', accentCustom: null };
   }
 }
 
@@ -127,7 +133,11 @@ function applyTheme() {
 }
 
 function applyAccent() {
-  const [a, b] = ACCENTS[settings.accent] ?? ACCENTS.violet;
+  let pair = ACCENTS[settings.accent];
+  if (settings.accent === 'custom' && settings.accentCustom) {
+    pair = derivePair(settings.accentCustom) ?? ACCENTS.violet;
+  }
+  const [a, b] = pair ?? ACCENTS.violet;
   document.documentElement.style.setProperty('--accent', a);
   document.documentElement.style.setProperty('--accent-2', b);
 }
@@ -190,7 +200,8 @@ function updateValidity() {
 
 function setNational(digits) {
   state.national = digitsOnly(digits).slice(0, 15);
-  phoneInput.value = formatAsYouType(state.national);
+  const country = countryByIso(state.iso);
+  phoneInput.value = formatAsYouType(state.national, state.iso, country?.dial ?? '');
   updateValidity();
 }
 
@@ -336,20 +347,35 @@ function renderTiles() {
 /* ----------------------------------------------------------------- launch */
 
 function launch(app, event) {
-  const e164 = currentE164();
-  if (!e164) {
+  const check = currentCheck();
+  if (!check.e164) {
     shake($('#heroCard'));
     toast(t('enterValid'), { kind: 'warn' });
     phoneInput.focus();
     return;
   }
-  launchNumber(app, e164);
+  const country = countryByIso(state.iso);
+  if (check.state === 'short' || check.state === 'long') {
+    // Unusual length is advisory, not a hard block: let the user insist.
+    const expected = check.min === check.max ? `${check.min}` : `${check.min}–${check.max}`;
+    toast(t('unusualLength', { country: country?.name ?? '', typed: check.typed, expected }), {
+      kind: 'warn',
+      timeout: 9000,
+      actionLabel: t('openAnyway'),
+      onAction: () => {
+        launchNumber(app, check.e164);
+        if (event) burst(event.clientX, event.clientY, app.color);
+      },
+    });
+    return;
+  }
+  launchNumber(app, check.e164);
   if (event) burst(event.clientX, event.clientY, app.color);
 }
 
 /** Shared by single launch and bulk rows. */
 function launchNumber(app, e164, message = state.message) {
-  history.add(e164);
+  history.add(e164, undefined, app.id);
   renderHistory();
   stats.record(app.id);
   vibrate(8);
@@ -379,9 +405,25 @@ function launchByIndex(idx) {
   if (app) launch(app);
 }
 
+/** Inside the Android shell: mirror top history entries as launcher shortcuts. */
+function notifyShellHistory() {
+  const shell = window.ReactNativeWebView;
+  if (!shell?.postMessage) return;
+  const items = history
+    .list()
+    .slice(0, 3)
+    .map((e) => ({ e164: e.e164, label: e.label ?? '', app: e.app ?? e.lastApp ?? '' }));
+  try {
+    shell.postMessage(JSON.stringify({ type: 'history', items }));
+  } catch {
+    /* shell bridge unavailable */
+  }
+}
+
 /* ---------------------------------------------------------------- history */
 
 const historyList = $('#historyList');
+let historyQuery = '';
 
 function flagForE164(e164) {
   const dial = matchDialCode(e164);
@@ -395,11 +437,33 @@ function countryForE164(e164) {
   return dial ? primaryCountryForDial(dial) : null;
 }
 
+/** Display a stored E.164 with its country's grouping (98765 43210). */
+function formatDisplay(e164) {
+  const dial = matchDialCode(e164);
+  const c = dial ? primaryCountryForDial(dial) : null;
+  if (!c) return formatAsYouType(e164);
+  const national = e164.slice(c.dial.length);
+  return `${flagOf(c.iso)} ${formatAsYouType(national, c.iso, c.dial)}`;
+}
+
 function renderHistory() {
-  const entries = history.list();
+  let entries = history.list();
+  const q = historyQuery.trim().toLowerCase();
+  if (q) {
+    const qDigits = q.replace(/\D/g, '');
+    entries = entries.filter((e) => {
+      const appName = (getApp(e.app)?.name ?? getApp(e.lastApp)?.name ?? '');
+      return (
+        (e.label ?? '').toLowerCase().includes(q) ||
+        (e.note ?? '').toLowerCase().includes(q) ||
+        appName.toLowerCase().includes(q) ||
+        (qDigits !== '' && e.e164.includes(qDigits))
+      );
+    });
+  }
   const empty = $('#historyEmpty');
   empty.hidden = entries.length > 0;
-  $('#historyClear').hidden = entries.length === 0;
+  $('#historyClear').hidden = history.list().length === 0;
 
   historyList.replaceChildren(
     ...entries.map((entry) => {
@@ -416,7 +480,7 @@ function renderHistory() {
       label.className = 'chip-label';
       const nameLine = document.createElement('span');
       nameLine.className = 'chip-name';
-      nameLine.textContent = entry.label || formatAsYouType(entry.e164);
+      nameLine.textContent = entry.label || formatDisplay(entry.e164);
       label.append(nameLine);
       if (entry.note) {
         const note = document.createElement('span');
@@ -438,6 +502,17 @@ function renderHistory() {
         pin.setAttribute('aria-label', 'pinned');
         chip.append(pin);
       }
+      if (entry.app || entry.lastApp) {
+        const app = getApp(entry.app) ?? getApp(entry.lastApp);
+        if (app) {
+          const dot = document.createElement('span');
+          dot.className = 'chip-app';
+          dot.style.background = app.color;
+          dot.title = app.name;
+          dot.setAttribute('aria-label', app.name);
+          chip.append(dot);
+        }
+      }
       chip.addEventListener('click', () => {
         const c = countryForE164(entry.e164);
         if (c) {
@@ -446,6 +521,7 @@ function renderHistory() {
           updateCountryChip();
         }
         setNational(entry.e164.slice(c ? c.dial.length : 0));
+        if (entry.app && getApp(entry.app)) state.defaultApp = entry.app;
         phoneInput.focus();
         window.scrollTo({ top: 0, behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
       });
@@ -464,6 +540,7 @@ function renderHistory() {
       return wrap;
     }),
   );
+  notifyShellHistory();
 }
 
 let openMenu = null;
@@ -471,6 +548,45 @@ function closeMenus() {
   openMenu?.remove();
   openMenu = null;
 }
+
+/** #6 — pick the default messenger for one history entry. */
+function openAppPicker(entry) {
+  const dlg = $('#appPickDialog');
+  dlg.querySelector('.dialog-title').textContent = t('defaultAppTitle');
+  const list = dlg.querySelector('.app-pick-list');
+  const choose = async (appId) => {
+    history.setDefaultApp(entry.e164, appId);
+    renderHistory();
+    dlg.close();
+    toast(`${t('setDefaultApp')}: ${appId ? getApp(appId)?.name : t('none')}`, { kind: 'good' });
+  };
+  list.replaceChildren(
+    ...orderedApps().map((app) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'app-pick-row ripple' + (entry.app === app.id ? ' active' : '');
+      const icon = document.createElement('span');
+      icon.className = 'app-pick-icon';
+      icon.style.color = app.color;
+      icon.innerHTML = app.icon;
+      const name = document.createElement('span');
+      name.textContent = app.name;
+      btn.append(icon, name);
+      btn.addEventListener('click', () => choose(app.id));
+      return btn;
+    }),
+    (() => {
+      const none = document.createElement('button');
+      none.type = 'button';
+      none.className = 'app-pick-row ripple';
+      none.textContent = t('none');
+      none.addEventListener('click', () => choose(null));
+      return none;
+    })(),
+  );
+  dlg.showModal();
+}
+$('#appPickClose')?.addEventListener('click', () => $('#appPickDialog').close());
 
 function openChipMenu(anchor, entry) {
   closeMenus();
@@ -509,6 +625,7 @@ function openChipMenu(anchor, entry) {
       renderHistory();
     }
   });
+  mk(t('setDefaultApp'), () => openAppPicker(entry));
   mk(t('copyNumber'), async () => {
     try {
       await navigator.clipboard.writeText(`+${entry.e164}`);
@@ -803,6 +920,18 @@ function renderSettings() {
   });
 
   const accentRow = $('#accentRow');
+  const customInput = $('#accentCustom');
+  if (customInput) {
+    customInput.value = settings.accentCustom ?? '#6c5cf6';
+    customInput.onchange = () => {
+      settings.accent = 'custom';
+      settings.accentCustom = customInput.value;
+      saveSettings();
+      applyAccent();
+      renderSettings();
+    };
+    customInput.classList.toggle('active', settings.accent === 'custom');
+  }
   accentRow.replaceChildren(
     ...Object.entries(ACCENTS).map(([name, [a, b]]) => {
       const btn = document.createElement('button');
@@ -958,11 +1087,187 @@ $('#clearDataBtn').addEventListener('click', async () => {
   }
 });
 
-/* ------------------------------------------------------------------ header */
+/* ------------------------------------------------------ backup / restore */
+
+$('#historySearch')?.addEventListener('input', (e) => {
+  historyQuery = e.target.value;
+  renderHistory();
+});
+
+$('#exportBtn')?.addEventListener('click', () => {
+  try {
+    const json = exportData({ settings, history: history.list(), stats: stats.get() });
+    const blob = new Blob([json], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `chat-launcher-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    toast(t('backupDone'), { kind: 'good' });
+  } catch {
+    toast(t('backupFail'), { kind: 'warn' });
+  }
+});
+
+$('#importBtn')?.addEventListener('click', () => $('#importFile').click());
+
+$('#importFile')?.addEventListener('change', async (e) => {
+  const file = e.target.files?.[0];
+  e.target.value = '';
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const result = importData(text);
+    if (!result.ok) {
+      toast(t('backupFail'), { kind: 'warn' });
+      return;
+    }
+    if (result.settings) {
+      settings = { ...settings, ...result.settings };
+      saveSettings();
+      applyTheme();
+      applyAccent();
+    }
+    history.replaceAll(result.history);
+    if (result.stats) stats.replace(result.stats);
+    if (settings.country) state.iso = settings.country;
+    updateCountryChip();
+    renderTiles();
+    renderHistory();
+    renderSettings();
+    toast(t('backupImported', { n: result.history.length }), { kind: 'good' });
+  } catch {
+    toast(t('backupFail'), { kind: 'warn' });
+  }
+});
+
+/* ---------------------------------------------------- vCard contact import */
+
+async function importVcfFile(file) {
+  if (!file) return;
+  if (file.size > 2 * 1024 * 1024) {
+    toast(t('backupFail'), { kind: 'warn' });
+    return;
+  }
+  try {
+    const contacts = parseVcf(await file.text());
+    let added = 0;
+    for (const c of contacts.slice(0, 50)) {
+      const e164 = c.number.slice(1);
+      history.add(e164, c.name || undefined);
+      added++;
+    }
+    renderHistory();
+    toast(added ? t('contactsImported', { n: added }) : t('bulkNoneValid'), {
+      kind: added ? 'good' : 'warn',
+    });
+  } catch {
+    toast(t('backupFail'), { kind: 'warn' });
+  }
+}
+
+$('#vcfBtn')?.addEventListener('click', () => $('#vcfFile').click());
+$('#vcfFile')?.addEventListener('change', (e) => {
+  const file = e.target.files?.[0];
+  e.target.value = '';
+  importVcfFile(file);
+});
+
+// Drag & drop a .vcf anywhere on the page.
+document.addEventListener('dragover', (e) => {
+  if (e.dataTransfer?.types?.includes('Files')) e.preventDefault();
+});
+document.addEventListener('drop', (e) => {
+  const file = e.dataTransfer?.files?.[0];
+  if (!file) return;
+  e.preventDefault();
+  if (/\.vcf$/i.test(file.name) || file.type === 'text/vcard') importVcfFile(file);
+});
+
+/* ------------------------------------------------------- error boundary --- */
+
+let errorToastAt = 0;
+function surfaceError() {
+  const now = Date.now();
+  if (now - errorToastAt < 5000) return;
+  errorToastAt = now;
+  toast(t('errorToast'), {
+    kind: 'warn',
+    timeout: 10000,
+    actionLabel: t('reload'),
+    onAction: () => location.reload(),
+  });
+}
+window.addEventListener('error', surfaceError);
+window.addEventListener('unhandledrejection', surfaceError);
+
+/* ------------------------------------------------------ offline queue ----- */
+
+function queueIfOffline(e164) {
+  queue.add(e164, state.defaultApp ?? undefined);
+  toast(t('queuedOffline'), {
+    kind: 'warn',
+    timeout: 8000,
+    actionLabel: t('queuedLaunch'),
+    onAction: () => offerQueued(),
+  });
+}
+
+function offerQueued() {
+  const pending = queue.list();
+  if (!pending.length) return;
+  const { e164, app: appId } = pending[0];
+  const app = (appId && getApp(appId)) || orderedApps()[0];
+  if (!app) return;
+  queue.take(e164);
+  launchNumber(app, e164);
+}
+
+window.addEventListener('online', () => {
+  if (queue.list().length) {
+    toast(t('queueBackOnline'), {
+      kind: 'good',
+      timeout: 10000,
+      actionLabel: t('queuedLaunch'),
+      onAction: () => offerQueued(),
+    });
+  }
+});
 
 $('#themeToggle').addEventListener('click', cycleTheme);
 $('#helpOpen').addEventListener('click', () => openDialog('helpDialog'));
 $('#helpClose').addEventListener('click', () => $('#helpDialog').close());
+
+/* ---------------------------------------------------- shell bridge (#10) */
+
+// The Android/iOS shell can push a number picked from the native contact
+// picker. Only trusted when we're actually running inside the shell.
+window.addEventListener('message', (e) => {
+  if (!window.ReactNativeWebView) return; // not inside the shell
+  let data = e.data;
+  if (typeof data === 'string') {
+    try {
+      data = JSON.parse(data);
+    } catch {
+      return;
+    }
+  }
+  if (!data || data.type !== 'chatlauncher-contact') return;
+  const raw = String(data.number ?? '');
+  if (!/^\+?\d{7,15}$/.test(raw)) return;
+  const parsed = parsePaste(raw.startsWith('+') ? raw : `+${raw}`);
+  if (parsed) {
+    state.iso = parsed.iso;
+    saveCountry();
+    updateCountryChip();
+    setNational(parsed.national);
+  } else {
+    setNational(raw);
+  }
+  phoneInput.focus();
+});
 
 /* --------------------------------------------------------------- shortcuts */
 
@@ -1032,6 +1337,11 @@ function consumeParams() {
       setNational(parsed.national);
     } else {
       setNational(candidate);
+    }
+    // Offline: the deep link can't work without network — hold the number.
+    if (!navigator.onLine) {
+      const check = currentCheck();
+      if (check.e164) queueIfOffline(check.e164);
     }
   }
   if (text && !minedFromText) {
@@ -1117,6 +1427,8 @@ function init() {
   updateValidity();
   registerServiceWorker();
   if (!('ontouchstart' in window)) phoneInput.focus();
+  // A number queued offline last session can be opened now.
+  if (navigator.onLine && queue.list().length) offerQueued();
 }
 
 init();

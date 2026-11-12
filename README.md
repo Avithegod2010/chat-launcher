@@ -20,21 +20,26 @@ Every messenger hides chat-by-number behind the same dance: save the contact, re
 - 🚀 **9 launch targets** — WhatsApp, Telegram, Signal, SMS, Phone call, Viber, Skype, LINE, Threema
 - 🌍 **Country picker** with ~230 dial codes and emoji flags; your choice is remembered
 - 🧠 **Smart paste** — `+44 20 7946 0958`, `0049…`, `+1 (555) …` are parsed and matched to the country by longest prefix
-- 🎯 **Per-country validation** — live feedback against each country's real numbering-plan lengths (India = 10 digits, Singapore = 8, …), not just a generic 7–15 rule
+- 🎯 **Country-aware formatting & validation** — numbers group as each country writes them (`98765 43210` in India, `555 123 4567` in the US) and are checked against the real numbering-plan length; unusual lengths ask before launching
 - ✍️ **Preset message** — pre-fill text where the platform supports it (WhatsApp, SMS)
-- 🕘 **History** — recent numbers with usage counts, pin favourites, rename, and free-text notes ("plumber — quoted 2k")
+- 🕘 **History** — usage counts, pins, rename, free-text notes, per-entry default messenger, and search (number, label, note or app name)
+- 📇 **Contact import** — a native picker in the Android shell, plus `.vcf` file import with drag & drop on desktop
 - 📷 **QR share** — scannable code for the current number, so desktop → phone handoff is one scan
-- 🧨 **Bulk launch** — paste a list of numbers, open them one by one or all at once (great for marketplace sellers)
+- 🧨 **Bulk launch** — paste a list of numbers, open them one by one or all at once
+- 📦 **Backup & restore** — export/import history, settings and stats as a validated JSON file
+- 📴 **Offline queue** — numbers shared in while offline wait for connectivity, then launch with one tap
 - 💬 **Open in the native app** — on desktop, right-click the WhatsApp/Telegram tile to launch the installed client instead of the web
-- ⌨️ **Dial-pad mode** for one-handed touch input
-- ⌨️ **Keyboard shortcuts** — `Enter` launch, `Ctrl+1–9` app picker, `/` focus, `d` dial pad, `t` theme, `?` help
-- 🌗 **Dark / light / system theme** with animated transitions, plus 4 accent presets
-- 🌐 **English + हिन्दी** interface (auto-detected, switchable in settings)
-- 📊 **Local-only usage dashboard** — chats launched all-time and this month, top apps — computed entirely on-device
-- 📲 **Installable PWA** — service-worker precache, offline from second visit, update toast, share-target support (share a number from any app into Chat Launcher)
+- ⌨️ **Dial-pad mode** and **keyboard shortcuts** — `Enter` launch, `Ctrl+1–9` app picker, `/` focus, `d` dial pad, `t` theme, `?` help
+- 🌗 **Dark / light / system theme**, four accent presets plus a custom color picker
+- 🌐 **Seven UI languages** — English, हिन्दी, Español, العربية (RTL), मराठी, বাংলা, தமிழ்
+- 📊 **Local-only usage dashboard** — chats launched all-time and this month, top apps, on-device only
+- 🛟 **Error boundary** — unexpected failures surface a toast with a reload action instead of a dead page
+- 📲 **Installable PWA** — service-worker precache, offline from second visit, update toast, share-target support
 - 🔗 **Deep links** — `?number=+15551234567&text=hi&app=whatsapp` opens pre-filled
-- ♿ **Accessible** — keyboard navigable, aria-live validation, `prefers-reduced-motion` honoured
-- 🤖 **CI on every push** — 55 unit tests + 9 adversarial security probes + asset checks; tags build the Android APK on EAS and attach it to the release automatically
+- 🤖 **Android shell extras** — contact picker and history-driven dynamic launcher shortcuts
+- 🖥️ **Desktop shell** — Tauri scaffold (`desktop/`) with a global-hotkey launcher window
+- ♿ **Accessible** — labeled dialogs, keyboard navigable, aria-live validation, `prefers-reduced-motion` honoured
+- 🧪 **Verified on every push** — 71 unit/property tests, 9 adversarial security probes, 11 e2e journeys, bundle-size budget, F-Droid metadata lint, Lighthouse budget
 
 ## Platform support
 
@@ -77,12 +82,27 @@ Requires only Node.js (any recent version). No build step, no dependencies.
 ## Tests
 
 ```bash
-npm test                    # node --test tests/
+npm test                    # unit + property-based tests
 node tools/serve.mjs &      # then, optionally:
 node tools/bug-hunt.mjs     # adversarial probes against a real browser
+node tools/e2e.mjs          # happy-path user journeys
+node tools/bundle-budget.mjs
+node tools/fdroid-lint.mjs
 ```
 
-55 unit tests cover phone-number normalization (E.164, trunk zeros, paste parsing, per-country lengths), every platform's deep-link shape, exactly-once message encoding, history behaviour (dedup, pinning, notes, capacity, corrupt-JSON recovery), stats aggregation, and i18n completeness. 9 adversarial probes drive the real app headless with hostile inputs (XSS payloads, poisoned localStorage, CSP violations).
+71 tests cover phone normalization (E.164, trunk zeros, paste parsing, per-country lengths and grouping), every platform's deep-link shape, exactly-once message encoding, history (dedup, pins, notes, last-app, capacity, corrupt-JSON recovery), stats, backups (round-trip + hostile imports), vCard parsing, the offline queue, color math, and i18n completeness across all seven languages — plus seeded property tests that fuzz ~1,700 generated inputs. 9 adversarial probes drive the app with hostile inputs (XSS payloads, poisoned storage, CSP checks); 11 e2e journeys exercise launch, search, i18n/RTL, export/import, contact import, the unusual-length confirm and dialog accessibility.
+
+## Repo layout
+
+| Path | What |
+|---|---|
+| `js/`, `css/`, `index.html` | the PWA — everything ships from the repo root (GitHub Pages) |
+| `tests/` | unit + property tests (`node --test`) |
+| `tools/` | dev tooling: server, screenshots, bug-hunt, e2e, budgets, f-droid lint |
+| `expo-app/` | Android shell (Expo): WebView host, contact picker, dynamic shortcuts |
+| `desktop/` | Tauri desktop shell scaffold (global hotkey launcher) |
+| `fdroid/` | F-Droid metadata + submission notes |
+| `docs/` | security audit report |
 
 ## Tech notes
 
@@ -90,7 +110,9 @@ node tools/bug-hunt.mjs     # adversarial probes against a real browser
 - **CSP-hardened** — `script-src 'self'`, `connect-src 'none'`, `form-action 'none'`
 - **60 fps animations** — transforms/opacity only; drifting gradient orbs, staggered tiles, ripple ink, particle burst
 - Numbers are normalized to [E.164](https://www.itu.int/rec/T-REC-E.164) before link construction; see [CONTEXT.md](CONTEXT.md) for the domain vocabulary
-- **Android shell** (`expo-app/`) is a minimal React Native WebView container built with EAS — it contributes no UI of its own
+- **Android shell** (`expo-app/`) is a minimal React Native WebView container built with EAS — it contributes no UI of its own, only a floating contact-picker button and history-driven launcher shortcuts
+- **Desktop shell** (`desktop/`) is a Tauri v2 window with a `Ctrl+Shift+C` global hotkey; build it with the Rust toolchain (see `desktop/README.md`)
+- **Distribution** — GitHub Pages (web), GitHub Releases (APK), F-Droid metadata for a self-hosted repo or an fdroiddata merge request
 
 ## Acknowledgments
 

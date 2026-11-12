@@ -54,6 +54,18 @@ test('formatAsYouType groups nicely', () => {
   assert.equal(formatAsYouType('98-76-54 3210'), '987 654 3210');
 });
 
+test('formatAsYouType uses the country grouping when known', () => {
+  assert.equal(formatAsYouType('9876543210', 'IN', '91'), '98765 43210');
+  assert.equal(formatAsYouType('5551234567', 'US', '1'), '555 123 4567');
+  assert.equal(formatAsYouType('98765', 'IN', '91'), '98765');
+  // half-typed numbers still format sensibly
+  assert.equal(formatAsYouType('55512', 'US', '1'), '555 12');
+  // 7-digit NANP national (Bahamas, dial 1242) → 3 + 4
+  assert.equal(formatAsYouType('5551234', 'BS', '1242'), '555 1234');
+  // unknown country falls back to generic chunking
+  assert.equal(formatAsYouType('9876543210', 'XX', '99'), '987 654 3210');
+});
+
 test('parsePaste resolves international numbers', () => {
   assert.deepEqual(parsePaste('+91 98765 43210'), { iso: 'IN', dial: '91', national: '9876543210' });
   assert.deepEqual(parsePaste('+15551234567'), { iso: 'US', dial: '1', national: '5551234567' });

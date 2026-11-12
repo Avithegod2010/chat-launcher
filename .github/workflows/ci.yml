@@ -20,21 +20,66 @@ jobs:
       - name: Install dev tooling
         run: npm ci
 
-      - name: Unit tests
+      - name: Unit + property-based tests
         run: npm test
+
+      - name: Bundle budget
+        run: node tools/bundle-budget.mjs
+
+      - name: F-Droid metadata lint
+        run: node tools/fdroid-lint.mjs
+
+      - name: Start dev server
+        run: |
+          node tools/serve.mjs &
+          sleep 2
 
       - name: Adversarial bug-hunt (headless Chromium)
         env:
           CHROME_PATH: /usr/bin/google-chrome
-        run: |
-          node tools/serve.mjs &
-          sleep 2
-          node tools/bug-hunt.mjs
+        run: node tools/bug-hunt.mjs
+
+      - name: E2E journeys (headless Chromium)
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+        run: node tools/e2e.mjs
 
       - name: Ensure site assets resolve
         run: |
-          for p in "" css/app.css js/main.js js/i18n.js js/stats.js js/qr.js js/vendor/qrcode-generator.js \
-                   manifest.webmanifest sw.js icons/icon-192.png; do
+          for p in "" css/app.css js/main.js js/i18n.js js/stats.js js/qr.js \
+                   js/backup.js js/colors.js js/vcf.js js/queue.js \
+                   js/vendor/qrcode-generator.js manifest.webmanifest sw.js icons/icon-192.png; do
             code=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:8143/$p")
             [ "$code" = "200" ] || { echo "MISSING /$p ($code)"; exit 1; }
           done
+
+  lighthouse:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Start dev server
+        run: |
+          node tools/serve.mjs &
+          sleep 2
+
+      - name: Lighthouse budget
+        run: |
+          npx --yes lighthouse@12 http://127.0.0.1:8143/ \
+            --quiet --chrome-flags="--headless --no-sandbox --disable-gpu" \
+            --only-categories=performance,accessibility,best-practices,seo \
+            --output=json --output-path=./lighthouse.json
+          node -e "
+            const r = require('./lighthouse.json');
+            const s = Object.fromEntries(Object.entries(r.categories).map(([k,v]) => [k, Math.round(v.score*100)]));
+            console.log('scores:', JSON.stringify(s));
+            const budget = { performance: 90, accessibility: 90, 'best-practices': 90, seo: 90 };
+            let failed = false;
+            for (const [k, min] of Object.entries(budget)) {
+              if ((s[k] ?? 0) < min) { console.error('BELOW BUDGET', k, s[k], '<', min); failed = true; }
+            }
+            process.exit(failed ? 1 : 0);
+          "

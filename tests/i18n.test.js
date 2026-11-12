@@ -28,12 +28,14 @@ function countKeys(lang) {
     'bulkRowsReady', 'qrTitle', 'qrHint', 'updateReady', 'refresh', 'themeNow',
     'installed', 'offlineFail', 'usageTotal', 'usageMonth', 'usageTop', 'usageNone',
     'whatsappDesktop', 'appName', 'helpFocus', 'helpEnter', 'helpCtrl', 'helpTheme',
-    'helpPad', 'helpHelp', 'helpNote',
+    'helpPad', 'helpHelp', 'helpNote', 'searchHistory', 'importContacts', 'setDefaultApp',
+    'defaultAppTitle', 'none', 'backupExport', 'backupImport', 'backupDone', 'backupFail',
+    'backupImported', 'contactsImported', 'unusualLength', 'openAnyway', 'accentCustom',
+    'errorToast', 'reload', 'queuedOffline', 'queuedLaunch', 'queueBackOnline',
   ];
   const out = {};
   for (const k of known) out[k] = k;
-  assert.equal(availableLangs.includes('en'), true);
-  assert.equal(availableLangs.includes('hi'), true);
+  assert.deepEqual(availableLangs.sort(), ['ar', 'bn', 'en', 'es', 'hi', 'mr', 'ta']);
   return out;
 }
 

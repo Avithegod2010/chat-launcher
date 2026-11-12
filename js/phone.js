@@ -2,7 +2,7 @@
  * Pure phone-number helpers. No DOM access — everything here is unit-tested
  * under Node (tests/phone.test.js).
  */
-import { matchDialCode, nationalLengthRange, primaryCountryForDial } from './countries.js';
+import { matchDialCode, nationalGroups, nationalLengthRange, primaryCountryForDial } from './countries.js';
 
 /**
  * Strip everything except digits.
@@ -82,22 +82,40 @@ export function checkNumber(dial, national, iso) {
 }
 
 /**
- * Light as-you-type grouping for display: chunks of 3, with the final chunk
- * stretched to 4 when the remainder would otherwise be 1.
- * ('9876543210' -> '987 654 3210', '1234567' -> '123 4567')
+ * As-you-type grouping for display. Uses the country's own grouping when
+ * known (India 98765 43210, US 555 123 4567), otherwise generic chunks of
+ * 3 with a stretched final group.
+ * ('9876543210' → '987 654 3210' generically, '98765 43210' for IN)
  * @param {string} national digits only
+ * @param {string} [iso] country ISO code for country-specific grouping
+ * @param {string} [dial] dial code in use (NANP area-aware)
  */
-export function formatAsYouType(national) {
+export function formatAsYouType(national, iso, dial) {
   const d = digitsOnly(national);
-  if (d.length <= 4) return d;
-  const groups = [];
+  if (d.length <= 3) return d;
+  const groups = iso ? nationalGroups(iso, digitsOnly(dial ?? '')) : null;
+  if (groups && groups.length > 1) {
+    const out = [];
+    let rest = d;
+    for (const size of groups) {
+      if (rest.length <= 0) break;
+      out.push(rest.slice(0, size));
+      rest = rest.slice(size);
+      if (rest.length <= 0) break;
+    }
+    if (rest) out.push(rest);
+    // Only honour the country pattern while it still fits the digits typed
+    // (a half-typed US number shouldn't get the GB pattern's leftovers).
+    if (out.length <= groups.length + 1) return out.join(' ');
+  }
+  const chunks = [];
   let rest = d;
   while (rest.length > 4) {
-    groups.push(rest.slice(0, 3));
+    chunks.push(rest.slice(0, 3));
     rest = rest.slice(3);
   }
-  groups.push(rest);
-  return groups.join(' ');
+  chunks.push(rest);
+  return chunks.join(' ');
 }
 
 /**

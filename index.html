@@ -110,8 +110,12 @@
     <section aria-label="History">
       <div class="history-head">
         <div class="section-title" data-i18n="historyTitle">History</div>
-        <button id="historyClear" class="ghost-btn ripple" type="button" hidden data-i18n="clearAll">Clear all</button>
+        <div class="history-tools">
+          <button id="vcfBtn" class="ghost-btn ripple" type="button" data-i18n="importContacts">📇 Contacts</button>
+          <button id="historyClear" class="ghost-btn ripple" type="button" hidden data-i18n="clearAll">Clear all</button>
+        </div>
       </div>
+      <input id="historySearch" class="history-search" type="search" data-i18n-ph="searchHistory" placeholder="Search history…" aria-label="Search history">
       <div id="historyEmpty" class="history-empty">
         <span data-i18n="historyEmpty">No history yet — launch a chat and it shows up here.</span><br>
         <span data-i18n="historyEmpty2">Everything stays on this device.</span>
@@ -150,14 +154,25 @@
         <label><input type="radio" name="theme" value="light"><span data-i18n="light">Light</span></label>
         <label><input type="radio" name="theme" value="dark"><span data-i18n="dark">Dark</span></label>
       </div>
-      <div class="theme-group" id="langGroup" role="radiogroup" aria-label="Language">
+      <div class="theme-group lang-group" id="langGroup" role="radiogroup" aria-label="Language">
         <label><input type="radio" name="lang" value="en"><span>English</span></label>
         <label><input type="radio" name="lang" value="hi"><span>हिन्दी</span></label>
+        <label><input type="radio" name="lang" value="es"><span>Español</span></label>
+        <label><input type="radio" name="lang" value="ar"><span>العربية</span></label>
+        <label><input type="radio" name="lang" value="mr"><span>मराठी</span></label>
+        <label><input type="radio" name="lang" value="bn"><span>বাংলা</span></label>
+        <label><input type="radio" name="lang" value="ta"><span>தமிழ்</span></label>
       </div>
       <div class="settings-label" data-i18n="accent">Accent</div>
-      <div class="accent-row" id="accentRow"></div>
+      <div class="accent-row" id="accentRow">
+        <input type="color" id="accentCustom" class="accent-custom" data-i18n-aria="accentCustom" aria-label="Custom accent color">
+      </div>
       <div id="tileSettings"></div>
       <div class="settings-footer">
+        <div class="settings-row">
+          <button id="exportBtn" class="btn" type="button" data-i18n="backupExport">Export data</button>
+          <button id="importBtn" class="btn" type="button" data-i18n="backupImport">Import data</button>
+        </div>
         <button id="usageOpen" class="btn" type="button" data-i18n="usage">Your usage (local only)</button>
         <button id="clearDataBtn" class="btn danger-btn" type="button" data-i18n="wipeData">Wipe all local data…</button>
         <p class="version-note" id="versionNote"></p>
@@ -228,9 +243,21 @@
     </div>
   </dialog>
 
-  <dialog id="textDialog">
+  <dialog id="appPickDialog" aria-labelledby="appPickTitle">
+    <div class="dialog-head">
+      <h2 class="dialog-title" id="appPickTitle" data-i18n="defaultAppTitle">Default app for this number</h2>
+      <button class="icon-btn ripple" id="appPickClose" type="button" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 6 12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+    <div class="dialog-body">
+      <div class="app-pick-list"></div>
+    </div>
+  </dialog>
+
+  <dialog id="textDialog" aria-labelledby="textTitle">
     <form>
-      <div class="dialog-head"><h2 class="dialog-title">Title</h2></div>
+      <div class="dialog-head"><h2 class="dialog-title" id="textTitle">Title</h2></div>
       <div class="dialog-body">
         <input class="text-input" type="text" maxlength="80" aria-label="Value">
         <div class="dialog-actions">
@@ -240,6 +267,9 @@
       </div>
     </form>
   </dialog>
+
+  <input type="file" id="importFile" accept="application/json,.json" hidden>
+  <input type="file" id="vcfFile" accept=".vcf,text/vcard,text/x-vcard" hidden>
 
   <div id="toasts" aria-live="polite"></div>
 

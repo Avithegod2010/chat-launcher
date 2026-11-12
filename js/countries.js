@@ -322,6 +322,37 @@ export function nationalLengthRange(iso, dial) {
   if (dial.length === 4 && dial.startsWith('1')) return [7, 7];
   return LENGTHS[iso] ?? null;
 }
+
+/**
+ * Display grouping for national numbers, as the country writes them
+ * (e.g. India 98765 43210, US 555 123 4567). Countries not listed fall
+ * back to the generic chunking in phone.js. NANP countries (dial '1' or a
+ * 4-digit '1xxx' prefix) use the NANP grouping.
+ */
+const GROUPS = {
+  US: [3, 3, 4], IN: [5, 5], GB: [4, 6], FR: [1, 2, 2, 2, 2],
+  BR: [2, 5, 4], RU: [3, 3, 2, 2], AU: [3, 3, 3], NZ: [2, 3, 4],
+  SG: [4, 4], JP: [2, 4, 4], KR: [2, 4, 4], CN: [3, 4, 4],
+  IT: [3, 3, 4], ES: [3, 3, 3], NL: [1, 4, 4], SE: [2, 3, 3, 2],
+  PL: [3, 3, 3], TR: [3, 3, 2, 2], AE: [2, 3, 4], SA: [2, 3, 4],
+  ID: [3, 4, 4], TH: [2, 3, 4], VN: [3, 3, 4], PH: [3, 3, 4],
+  MX: [2, 4, 4], NG: [3, 3, 4], ZA: [2, 3, 4], EG: [2, 4, 4],
+  KE: [3, 3, 4], PK: [3, 4, 3], BD: [4, 6],
+};
+
+/** 7-digit NANP national numbers group as 3 + 4. */
+const NANP_GROUPS = [3, 4];
+
+/**
+ * @param {string} iso
+ * @param {string} dial the dial code in use (NANP area-aware)
+ * @returns {number[]|null}
+ */
+export function nationalGroups(iso, dial) {
+  if (dial === '1') return [3, 3, 4];
+  if (dial.length === 4 && dial.startsWith('1')) return NANP_GROUPS;
+  return GROUPS[iso] ?? null;
+}
 export function matchDialCode(digits) {
   return DIAL_INDEX.find((d) => digits.startsWith(d) && digits.length > d.length) ?? null;
 }

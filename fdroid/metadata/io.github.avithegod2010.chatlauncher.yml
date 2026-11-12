@@ -1,0 +1,49 @@
+Categories:
+  - Phone & SMS
+  - System
+License: MIT
+AuthorName: Chat Launcher Contributors
+WebSite: https://avithegod2010.github.io/chat-launcher/
+SourceCode: https://github.com/Avithegod2010/chat-launcher
+IssueTracker: https://github.com/Avithegod2010/chat-launcher/issues
+Changelog: https://github.com/Avithegod2010/chat-launcher/releases
+
+AutoName: Chat Launcher
+
+Summary: Open any phone number's chat in WhatsApp, Telegram, Signal and more
+
+Description: |-
+  Type a phone number, tap an app, start chatting. Chat Launcher opens a
+  number's chat directly in WhatsApp, Telegram, Signal, SMS, Viber, Skype,
+  LINE or Threema — no contacts app, no copy-pasting.
+
+  Features:
+  * Country picker with ~230 dial codes and per-country length validation
+  * Smart paste, preset messages, launch history with notes and pins
+  * QR share, bulk launch, English/Hindi/more UI languages
+  * No tracking, no accounts — everything stays on your device
+  * Installable PWA with offline support
+
+  The Android app is a thin shell around the live web app; it loads the
+  canonical Chat Launcher PWA and hands deep links to the installed
+  messengers.
+
+RepoType: git
+Repo: https://github.com/Avithegod2010/chat-launcher.git
+
+Binaries: https://github.com/Avithegod2010/chat-launcher/releases/download/v1.0.0/app-release.apk
+
+Builds:
+  - versionName: 1.0.0
+    versionCode: 1
+    commit: v1.0.0
+    subdir: expo-app
+    sudo:
+      - npm install -g eas-cli
+    build: eas build --platform android --profile preview --non-interactive
+    prebuild: npm ci --no-fund --no-audit
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags
+CurrentVersion: 1.3.0
+CurrentVersionCode: 4

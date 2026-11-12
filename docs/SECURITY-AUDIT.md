@@ -152,11 +152,79 @@ v1.2 UI.
   was ever exposed in plaintext (e.g. chat).
 - **Least-privilege workflows:** `ci.yml` has no secrets and needs none;
   `release.yml` only gets `EXPO_TOKEN` + the built-in `contents:write` token,
-  and runs only on `v*` tags.
+  and runs only on `v*` tags; the Play upload step is skipped unless a
+  `GOOGLE_SERVICE_ACCOUNT` secret exists.
 - **Known accepted risks:** Dependabot flags `zod` and `node-forge` inside
   Expo's local CLI tooling (transitive dev-only; the site ships zero deps and
   EAS builds in Expo's cloud). Forcing overrides there risks breaking the
   build chain; tracked upstream instead.
+
+---
+
+# v1.3 addendum — new surfaces
+
+## Shell bridge (postMessage between PWA and Expo shell)
+
+**Threat:** a hostile page could try to push a number into the input via a
+`message` event, or trick the shell into opening something.
+
+**Mitigations:** the page-side listener runs only when
+`window.ReactNativeWebView` exists (i.e. inside our shell), the payload must
+be `{type:'chatlauncher-contact', number}` with a digit-only 7–15 length
+check, and the number goes through the same `parsePaste`/`setNational`
+pipeline as typing. It can only pre-fill the input — it can never launch a
+chat by itself. The shell side validates the same shape before showing
+anything.
+
+**History → shortcuts:** only the top three entries' `{e164, label, app}`
+cross into the OS shortcut list; text is rendered by Android, not HTML.
+
+## Contact picker (READ_CONTACTS)
+
+Permission is requested at tap time, never on boot. Contacts are read into
+memory for the picker list only, capped at 400 entries, and **nothing is
+persisted** — only the single chosen number crosses into the page. No contact
+data is sent anywhere (the shell has no network code besides the webview).
+
+## Backup import
+
+`js/backup.js` re-validates every field (history entries must match
+`/^\d{7,15}$/`, labels/notes are length-clamped, settings are whitelisted by
+enum, stats keys must be `[\\w-]{1,24}` with positive counts; unknown format
+versions are rejected). Hostile-import unit tests assert that junk, prototype
+pollution attempts and negative counters are neutralized.
+
+## vCard import
+
+Files are size-capped at 2 MB, parsed line-by-line with folded-line support,
+and only `+E.164`-shaped numbers (7–15 digits) are accepted — local-format
+numbers are skipped rather than guessed. No network access at any point.
+
+## Offline queue
+
+Entries match `/^\d{7,15}$/` and are capped at 5; the queue only ever holds
+numbers the user already shared or launched.
+
+## Tauri shell
+
+The window loads the production HTTPS URL; the capability file allows remote
+access only to `https://avithegod2010.github.io/*`. The global shortcut
+(`Ctrl+Shift+C`) only shows/focuses the window — it executes no code from the
+webview and grants no IPC beyond core defaults. The scaffold is unbuilt in CI
+(no Rust toolchain on the build machine), so this is a design-level review.
+
+## Dev-workflow note (pop-up fix)
+
+Earlier tooling called `git credential fill` without disabling Git Credential
+Manager's UI, which could spawn interactive windows. All automation now runs
+with `GIT_TERMINAL_PROMPT=0 GCM_INTERACTIVE=never` and
+`git -c credential.interactive=false`, so stored credentials are read
+silently and no window can open.
+
+**Verdict (v1.3):** DOM XSS — PASS · URL param abuse — PASS · shell bridge
+trust model — PASS (input-only, pre-fill) · backup/vcf/queue hostile input —
+PASS (unit-tested) · secrets in repo — PASS (history scan clean) · privacy
+claims — PASS (no network APIs added).
 
 ---
 

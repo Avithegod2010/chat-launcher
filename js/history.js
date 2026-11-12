@@ -74,21 +74,24 @@ export function createHistory(storage) {
     /**
      * @param {string} e164
      * @param {string} [label]
+     * @param {string} [appId] app used for this launch (searchable, not a default)
      */
-    add(e164, label) {
+    add(e164, label, appId) {
       const entries = read() ?? [];
       const i = entries.findIndex((e) => e.e164 === e164);
       seq++;
+      const lastApp = appId && /^[\w-]{1,24}$/.test(appId) ? { lastApp: appId } : {};
       if (i >= 0) {
         entries[i] = {
           ...entries[i],
+          ...lastApp,
           count: (entries[i].count ?? 0) + 1,
           lastUsed: Date.now(),
           seq,
           label: label ?? entries[i].label,
         };
       } else {
-        entries.push({ e164, label: label || '', count: 1, lastUsed: Date.now(), seq, pinned: false });
+        entries.push({ e164, label: label || '', count: 1, lastUsed: Date.now(), seq, pinned: false, ...lastApp });
       }
       const capped = enforceCap(entries);
       write(capped);
@@ -155,6 +158,40 @@ export function createHistory(storage) {
         write(entries);
       }
       return sorted(entries);
+    },
+
+    /**
+     * Per-entry default messenger (id from the apps registry).
+     * @param {string} e164
+     * @param {string|null} appId
+     */
+    setDefaultApp(e164, appId) {
+      const entries = read() ?? [];
+      const e = entries.find((x) => x.e164 === e164);
+      if (e) {
+        if (appId && /^[\w-]{1,24}$/.test(appId)) e.app = appId;
+        else delete e.app;
+        write(entries);
+      }
+      return sorted(entries);
+    },
+
+    /** Replace the whole list (backup import). */
+    replaceAll(entries) {
+      const clean = (Array.isArray(entries) ? entries : [])
+        .filter((e) => e && typeof e.e164 === 'string' && /^\d{7,15}$/.test(e.e164))
+        .map((e) => ({
+          e164: e.e164,
+          label: typeof e.label === 'string' ? e.label.slice(0, 40) : '',
+          note: typeof e.note === 'string' ? e.note.slice(0, 80) : '',
+          count: Number(e.count) > 0 ? Number(e.count) : 1,
+          lastUsed: Number(e.lastUsed) || 0,
+          pinned: !!e.pinned,
+          ...(typeof e.app === 'string' && /^[\w-]{1,24}$/.test(e.app) ? { app: e.app } : {}),
+        }))
+        .slice(0, CAP);
+      write(clean);
+      return sorted(clean);
     },
 
     clear() {

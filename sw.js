@@ -3,7 +3,7 @@
  * The whole app is local and tiny, so everything is cached on install and the
  * app works fully offline. Bump CACHE_VERSION whenever any asset changes.
  */
-const CACHE_VERSION = 'chatlauncher-v1.2.0';
+const CACHE_VERSION = 'chatlauncher-v1.3.0';
 
 const PRECACHE = [
   './',
@@ -20,6 +20,10 @@ const PRECACHE = [
   './js/ui.js',
   './js/i18n.js',
   './js/stats.js',
+  './js/queue.js',
+  './js/backup.js',
+  './js/colors.js',
+  './js/vcf.js',
   './js/qr.js',
   './js/vendor/qrcode-generator.js',
   './icons/icon-192.png',

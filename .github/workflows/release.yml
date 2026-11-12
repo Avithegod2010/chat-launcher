@@ -8,6 +8,42 @@ permissions:
   contents: write
 
 jobs:
+  changelog:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Append this tag's notes to CHANGELOG.md
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -e
+          body=$(gh api "repos/${{ github.repository }}/releases/tags/$TAG" --jq .body || true)
+          if [ -z "$body" ]; then
+            body=$(git tag -l --format='%(contents)' "$TAG")
+          fi
+          [ -z "$body" ] && body="_No release notes provided._"
+          if grep -qF "## [$TAG]" CHANGELOG.md 2>/dev/null; then
+            echo "already recorded"; exit 0
+          fi
+          {
+            head -n 6 CHANGELOG.md 2>/dev/null || printf '# Changelog\n\nAll notable changes to Chat Launcher. Newest first.\n\n'
+          } > /tmp/cl.md
+          {
+            printf '\n## [%s] — %s\n\n%s\n' "$TAG" "$(date -u +%Y-%m-%d)" "$body"
+            tail -n +7 /tmp/cl.md 2>/dev/null || true
+          } >> /tmp/cl.md
+          mv /tmp/cl.md CHANGELOG.md
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          git commit -m "docs(changelog): $TAG"
+          git push origin HEAD:main
+
   android-apk:
     runs-on: ubuntu-latest
     steps:
@@ -49,10 +85,33 @@ jobs:
           eas build:view "$BUILD_ID" --json | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>console.log(JSON.parse(d).artifacts.buildUrl))" > apk-url.txt
           curl -sL -o app-release.apk "$(cat apk-url.txt)"
           ls -la app-release.apk
+          sha256sum app-release.apk | tee SHA256SUMS.txt
 
-      - name: Attach APK to the release
+      - name: Attach APK + checksums to the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="${GITHUB_REF#refs/tags/}"
-          gh release upload "$TAG" expo-app/app-release.apk --clobber
+          gh release upload "$TAG" expo-app/app-release.apk expo-app/SHA256SUMS.txt --clobber
+
+      - name: Submit AAB to Play (only when the service account secret exists)
+        if: ${{ secrets.GOOGLE_SERVICE_ACCOUNT != '' }}
+        env:
+          GOOGLE_SERVICE_ACCOUNT: ${{ secrets.GOOGLE_SERVICE_ACCOUNT }}
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          cd expo-app
+          printf '%s' "$GOOGLE_SERVICE_ACCOUNT" | base64 -d > google-service-account.json
+          eas build --platform android --profile production --non-interactive --no-wait --json > aab.json
+          AAB_ID=$(node -e "const j=require('./aab.json');console.log(Array.isArray(j)?j[0].id:j.id)")
+          for i in $(seq 1 60); do
+            STATUS=$(eas build:view "$AAB_ID" --json | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>console.log(JSON.parse(d).status))")
+            echo "aab poll $i: $STATUS"
+            case "$STATUS" in
+              FINISHED) break ;;
+              ERRORED|CANCELED) echo "AAB build $STATUS"; exit 1 ;;
+            esac
+            sleep 30
+          done
+          eas submit --platform android --profile production --non-interactive --id "$AAB_ID" || \
+            echo "::warning::eas submit failed — check Play Console setup and the service account"

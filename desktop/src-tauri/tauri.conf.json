@@ -1,0 +1,33 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Chat Launcher",
+  "version": "1.3.0",
+  "identifier": "io.github.avithegod2010.chatlauncher",
+  "build": {
+    "frontendDist": "../src"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Chat Launcher",
+        "width": 460,
+        "height": 820,
+        "minWidth": 380,
+        "minHeight": 560,
+        "resizable": true,
+        "alwaysOnTop": true,
+        "center": true,
+        "url": "https://avithegod2010.github.io/chat-launcher/"
+      }
+    ],
+    "security": {
+      "capabilities": ["default"]
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis", "dmg", "appimage"],
+    "icon": ["icons/icon.png"]
+  }
+}

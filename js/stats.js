@@ -92,5 +92,17 @@ export function createStats(storage) {
       }
       return { total: 0, firstUsed: Date.now(), byApp: {}, byMonth: {} };
     },
+
+    /** Replace aggregates wholesale (backup import). */
+    replace(s) {
+      const safe = {
+        total: Math.max(0, Number(s?.total) || 0),
+        firstUsed: Math.max(0, Number(s?.firstUsed) || Date.now()),
+        byApp: cleanCounts(s?.byApp),
+        byMonth: cleanCounts(s?.byMonth),
+      };
+      write(safe);
+      return safe;
+    },
   };
 }

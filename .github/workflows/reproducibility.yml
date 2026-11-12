@@ -1,0 +1,59 @@
+name: APK reproducibility check (informational)
+
+# Manual, opt-in: builds the same commit twice on EAS and compares the APK
+# hashes. NOT byte-reproducible by nature (signing timestamps, Gradle caches
+# on EAS infra), so this reports a diff summary rather than failing.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  double-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install Expo dependencies
+        run: |
+          cd expo-app
+          npm ci --no-fund --no-audit
+          npm install -g eas-cli
+
+      - name: Build twice and compare
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          cd expo-app
+          for n in 1 2; do
+            eas build --platform android --profile preview --non-interactive --no-wait --json > "b$n.json"
+            ID=$(node -e "const j=require('./b$n.json');console.log(Array.isArray(j)?j[0].id:j.id)")
+            for i in $(seq 1 60); do
+              STATUS=$(eas build:view "$ID" --json | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>console.log(JSON.parse(d).status))")
+              echo "build $n poll $i: $STATUS"
+              case "$STATUS" in
+                FINISHED) break ;;
+                ERRORED|CANCELED) echo "build $n failed"; exit 1 ;;
+              esac
+              sleep 30
+            done
+            URL=$(eas build:view "$ID" --json | node -e "let d='';process.stdin.on('data',c=>d+=c).on('end',()=>console.log(JSON.parse(d).artifacts.buildUrl))")
+            curl -sL -o "app-$n.apk" "$URL"
+          done
+          echo "build 1: $(sha256sum app-1.apk)"
+          echo "build 2: $(sha256sum app-2.apk)"
+          echo "sizes: $(stat -c%s app-1.apk) / $(stat -c%s app-2.apk)"
+          if cmp -s app-1.apk app-2.apk; then
+            echo "::notice::APKs are byte-identical"
+          else
+            echo "::notice::APKs differ (expected: signing timestamps + EAS toolchain) — sizes above; content review recommended before publishing"
+          fi
+          echo "### Reproducibility result" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          sha256sum app-1.apk app-2.apk >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"

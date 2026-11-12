@@ -15,6 +15,12 @@ should read this first so discussions use the same words.
 | **Preset message** | Optional pre-filled text handed to the target via `?text=` / `?body=` where the platform supports it. |
 | **Precache** | The service worker strategy: the entire app shell is cached on install, so the app works fully offline and loads instantly. |
 | **Expo shell** | The Android app in `expo-app/`: a minimal React Native WebView container (built on EAS) that hosts the live PWA and forwards external links to the OS. It holds no UI or data of its own. |
+| **Shell bridge** | The two-way `postMessage` channel between the PWA and the Expo/Tauri shell: the page posts its top history entries (→ dynamic launcher shortcuts), the shell posts contact-picked numbers (→ phone input). Guarded by the presence of `window.ReactNativeWebView`. |
+| **Quick action** | A home-screen long-press shortcut. Static ones are defined at build time; dynamic ones are set at runtime from the user's most-used history entries. |
+| **Backup** | A JSON file (`chat-launcher-backup`, versioned) containing settings, history and stats, produced locally and validated field-by-field on import. |
+| **Offline queue** | Numbers shared into the app while offline (`chatlauncher:pending`, max 5). A toast offers a one-tap launch when connectivity returns. |
+| **Bundle budget** | The CI guard on how many kilobytes the precached app shell may weigh (currently well under 400 KB uncompressed). |
+| **Reproducibility job** | A manual workflow that builds the same commit twice on EAS and compares APK hashes. Informational only — signed APKs are not byte-identical by nature. |
 | **Share target** | Manifest feature letting the installed PWA appear in the Android share sheet; shared text is received as `?text=` and mined for a phone number. |
 
 ## Product rules of thumb
