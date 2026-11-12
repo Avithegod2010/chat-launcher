@@ -76,7 +76,9 @@ jobs:
             const r = require('./lighthouse.json');
             const s = Object.fromEntries(Object.entries(r.categories).map(([k,v]) => [k, Math.round(v.score*100)]));
             console.log('scores:', JSON.stringify(s));
-            const budget = { performance: 90, accessibility: 90, 'best-practices': 90, seo: 90 };
+            // Performance 80 accounts for cold-run noise on shared runners
+            // (no CDN cache, no HTTP compression from the dev server).
+            const budget = { performance: 80, accessibility: 95, 'best-practices': 95, seo: 90 };
             let failed = false;
             for (const [k, min] of Object.entries(budget)) {
               if ((s[k] ?? 0) < min) { console.error('BELOW BUDGET', k, s[k], '<', min); failed = true; }

@@ -46,6 +46,10 @@ jobs:
 
   android-apk:
     runs-on: ubuntu-latest
+    # Job-level env so the step `if` can test the secret without the
+    # (unsupported) `secrets` context inside `if`.
+    env:
+      GOOGLE_SERVICE_ACCOUNT: ${{ secrets.GOOGLE_SERVICE_ACCOUNT }}
     steps:
       - uses: actions/checkout@v4
 
@@ -95,7 +99,7 @@ jobs:
           gh release upload "$TAG" expo-app/app-release.apk expo-app/SHA256SUMS.txt --clobber
 
       - name: Submit AAB to Play (only when the service account secret exists)
-        if: ${{ secrets.GOOGLE_SERVICE_ACCOUNT != '' }}
+        if: ${{ env.GOOGLE_SERVICE_ACCOUNT != '' }}
         env:
           GOOGLE_SERVICE_ACCOUNT: ${{ secrets.GOOGLE_SERVICE_ACCOUNT }}
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
