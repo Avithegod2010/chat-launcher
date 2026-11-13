@@ -42,6 +42,7 @@ class LauncherTileService : TileService() {
 function tileServiceManifestXml() {
   return `    <service
         android:name=".LauncherTileService"
+        android:exported="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/tile_label"
         android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">

@@ -39,3 +39,15 @@ test('shortcut urls point at the app origin with ?app=', () => {
     assert.match(url, /^https:\/\/avithegod2010\.github\.io\/chat-launcher\/\?app=[a-z]+$/);
   }
 });
+
+test('tile service declares exported=true (manifest merger requires it on Android 12+)', () => {
+  const tile = require('../expo-app/plugins/tile-extras.js');
+  const xml = tile.tileServiceManifestXml();
+  assert.match(xml, /LauncherTileService/);
+  assert.match(xml, /android:exported="true"/);
+  assert.match(xml, /android:permission="android\.permission\.BIND_QUICK_SETTINGS_TILE"/);
+  assert.match(xml, /android\.service\.quicksettings\.action\.QS_TILE/);
+  const kotlin = tile.tileServiceKotlin('io.github.avithegod2010.chatlauncher');
+  assert.match(kotlin, /^package io\.github\.avithegod2010\.chatlauncher/m);
+  assert.match(kotlin, /PendingIntent\.FLAG_IMMUTABLE/);
+});
