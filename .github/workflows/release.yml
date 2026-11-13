@@ -69,6 +69,9 @@ jobs:
 
       - name: Install Expo dependencies (config plugins need them client-side)
         run: |
+          # Root deps too: eas-cli >= 27 runs `npm ls` against the repo root
+          # (the git root) and hard-fails when it is incomplete.
+          npm ci --no-fund --no-audit
           cd expo-app
           npm ci --no-fund --no-audit
 
