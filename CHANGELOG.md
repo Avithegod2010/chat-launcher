@@ -3,6 +3,18 @@
 All notable changes to Chat Launcher. Newest entries are prepended
 automatically by the release workflow from each GitHub Release's notes.
 
+## [v2.0.2] — 2026-11-14
+
+- **Widget taps fixed** — chips deep-link through the app's own
+  `chatlauncher://` scheme (an https openURL from the widget's headless task
+  resolved ambiguously or did nothing), and the fallback chips now open the
+  launcher instead of doing nothing
+- **Scanner works everywhere** — when the platform lacks `BarcodeDetector`
+  (desktop browsers, older WebViews) the camera frames decode through a
+  vendored jsQR (lazy-loaded, MIT); BarcodeDetector stays the native fast path
+- EAS version source switched to `local` — versionCode bumps in app.json are
+  honoured from now on
+
 ## [v2.0.1] — 2026-11-14
 
 - **Export data works in the Android shell** — backups hand off as base64 over

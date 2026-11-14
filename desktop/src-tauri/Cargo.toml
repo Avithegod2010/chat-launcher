@@ -1,6 +1,6 @@
 [package]
 name = "chat-launcher-desktop"
-version = "2.0.1"
+version = "2.0.2"
 description = "Chat Launcher — desktop shell around the live PWA"
 edition = "2021"
 

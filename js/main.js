@@ -39,7 +39,7 @@ import {
   withViewTransition,
 } from './ui.js';
 
-const APP_VERSION = '2.0.1';
+const APP_VERSION = '2.0.2';
 const SETTINGS_KEY = 'chatlauncher:settings';
 const SYNC_CFG_KEY = 'chatlauncher:sync';
 const $ = (sel) => document.querySelector(sel);
@@ -1578,10 +1578,6 @@ function stopScanner() {
 
 async function startScannerCamera() {
   const video = $('#scannerVideo');
-  if (!('BarcodeDetector' in window)) {
-    $('#scannerUnsupported').hidden = false;
-    return;
-  }
   try {
     scannerStream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: 'environment' },
@@ -1589,44 +1585,89 @@ async function startScannerCamera() {
     });
     video.srcObject = scannerStream;
     await video.play().catch(() => {});
-    const formats = await window.BarcodeDetector.getSupportedFormats();
-    const wanted = ['qr_code', 'code_128', 'ean_13', 'data_matrix', 'code_39'].filter((f) =>
-      formats.includes(f),
-    );
-    const detector = new window.BarcodeDetector(wanted.length ? { formats: wanted } : undefined);
-    scannerTimer = setInterval(async () => {
-      if (!scannerStream) return;
-      try {
-        const codes = await detector.detect(video);
-        if (codes.length) {
-          const parsed = numberFromScan(codes[0].rawValue);
-          if (parsed) {
-            stopScanner();
-            $('#scannerDialog').close();
-            state.iso = parsed.iso;
-            saveCountry();
-            updateCountryChip();
-            setNational(parsed.national);
-            phoneInput.focus();
-            toast(t('countryDetected', { flag: flagOf(parsed.iso), country: countryByIso(parsed.iso)?.name }));
-          }
-        }
-      } catch {
-        /* frame not ready — keep scanning */
-      }
-    }, 350);
+    if ('BarcodeDetector' in window) {
+      startNativeDetectLoop(video);
+    } else {
+      // Desktop browsers (and older WebViews) lack BarcodeDetector — fall
+      // back to the vendored jsQR decoder over canvas frames.
+      startJsqrDetectLoop(video);
+    }
   } catch {
     $('#scannerUnsupported').hidden = false;
     toast(t('cameraBlocked'), { kind: 'warn' });
   }
 }
 
+function handleScannedText(raw) {
+  const parsed = numberFromScan(raw);
+  if (!parsed) return;
+  stopScanner();
+  $('#scannerDialog').close();
+  state.iso = parsed.iso;
+  saveCountry();
+  updateCountryChip();
+  setNational(parsed.national);
+  phoneInput.focus();
+  toast(t('countryDetected', { flag: flagOf(parsed.iso), country: countryByIso(parsed.iso)?.name }));
+}
+
+function startNativeDetectLoop(video) {
+  window.BarcodeDetector.getSupportedFormats()
+    .then((formats) => {
+      const wanted = ['qr_code', 'code_128', 'ean_13', 'data_matrix', 'code_39'].filter((f) =>
+        formats.includes(f),
+      );
+      return new window.BarcodeDetector(wanted.length ? { formats: wanted } : undefined);
+    })
+    .then((detector) => {
+      scannerTimer = setInterval(async () => {
+        if (!scannerStream) return;
+        try {
+          const codes = await detector.detect(video);
+          if (codes.length) handleScannedText(codes[0].rawValue);
+        } catch {
+          /* frame not ready — keep scanning */
+        }
+      }, 350);
+    });
+}
+
+let jsqrCanvas = null;
+
+function startJsqrDetectLoop(video) {
+  jsqrCanvas = jsqrCanvas ?? document.createElement('canvas');
+  const ctx = jsqrCanvas.getContext('2d', { willReadFrequently: true });
+  import('./vendor/jsqr.js')
+    .then(({ default: jsQR }) => {
+      scannerTimer = setInterval(() => {
+        if (!scannerStream || !video.videoWidth) return;
+        const w = Math.min(640, video.videoWidth);
+        const scale = w / video.videoWidth;
+        jsqrCanvas.width = w;
+        jsqrCanvas.height = Math.round(video.videoHeight * scale);
+        ctx.drawImage(video, 0, 0, jsqrCanvas.width, jsqrCanvas.height);
+        try {
+          const code = jsQR(
+            ctx.getImageData(0, 0, jsqrCanvas.width, jsqrCanvas.height).data,
+            jsqrCanvas.width,
+            jsqrCanvas.height,
+          );
+          if (code?.data) handleScannedText(code.data);
+        } catch {
+          /* frame not ready — keep scanning */
+        }
+      }, 400);
+    })
+    .catch(() => {
+      $('#scannerUnsupported').hidden = false;
+    });
+}
+
 $('#scanBtn')?.addEventListener('click', () => {
-  const supported = 'BarcodeDetector' in window;
-  $('#scannerUnsupported').hidden = supported;
-  $('#scannerActions').hidden = supported;
+  $('#scannerUnsupported').hidden = true;
+  $('#scannerActions').hidden = true;
   $('#scannerDialog').showModal();
-  if (supported) startScannerCamera();
+  startScannerCamera();
 });
 $('#scannerClose')?.addEventListener('click', () => {
   stopScanner();

@@ -3,7 +3,7 @@
  * The whole app is local and tiny, so everything is cached on install and the
  * app works fully offline. Bump CACHE_VERSION whenever any asset changes.
  */
-const CACHE_VERSION = 'chatlauncher-v2.0.1';
+const CACHE_VERSION = 'chatlauncher-v2.0.2';
 
 const PRECACHE = [
   './',

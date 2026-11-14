@@ -36,10 +36,21 @@ export async function saveWidgetItems(items) {
 }
 
 export function openNumber(e164, app) {
+  // Deep-link into our own activity (chatlauncher:// scheme) so the tap always
+  // opens the shell — an https Linking.openURL from the headless task context
+  // resolves ambiguously (browser vs app) or fails silently.
   const url =
-    `${START_URL}?number=${encodeURIComponent('+' + e164)}` +
-    (app ? `&app=${encodeURIComponent(app)}` : '');
-  Linking.openURL(url).catch(() => {});
+    e164
+      ? `chatlauncher://open?number=${encodeURIComponent(e164)}${app ? `&app=${encodeURIComponent(app)}` : ''}`
+      : 'chatlauncher://open';
+  Linking.openURL(url).catch(() => {
+    // Scheme unavailable (older build) — fall back to the site URL.
+    const site =
+      e164
+        ? `${START_URL}?number=${encodeURIComponent('+' + e164)}${app ? `&app=${encodeURIComponent(app)}` : ''}`
+        : START_URL;
+    Linking.openURL(site).catch(() => {});
+  });
 }
 
 function TargetChip({ label, sub, number, app }) {
@@ -125,7 +136,8 @@ registerWidgetTaskHandler(async ({ widgetAction, clickAction, clickActionData, r
   if (widgetAction === 'WIDGET_DELETED') return;
   if (widgetAction === 'WIDGET_CLICK' && clickAction === 'OPEN_NUMBER') {
     const { number = '', app = '' } = clickActionData ?? {};
-    if (number) openNumber(number, app);
+    // number may be empty for the fallback chips — those open the launcher itself.
+    openNumber(number, app);
   }
   const items = await readWidgetItems();
   renderWidget(<HomeWidgetView items={items} />);

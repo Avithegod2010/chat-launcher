@@ -86,6 +86,34 @@ export default function App() {
     webRef.current?.injectJavaScript(`window.location.href = ${JSON.stringify(url)}; true;`);
   }, []);
 
+  /* ---- deep links (widget taps use chatlauncher://) --------------------- */
+  const handleDeepLink = useCallback((url) => {
+    if (!url || !url.startsWith('chatlauncher://')) return;
+    let params;
+    try {
+      params = new URL(url.replace('chatlauncher://', 'https://d.link/')).searchParams;
+    } catch {
+      return;
+    }
+    const number = (params.get('number') ?? '').replace(/[^\d]/g, '');
+    if (!number) {
+      // Bare open: just bring the launcher up.
+      webRef.current?.injectJavaScript(`window.location.href = ${JSON.stringify(START_URL)}; true;`);
+      return;
+    }
+    const app = params.get('app');
+    const site =
+      `${START_URL}?number=${encodeURIComponent('+' + number)}` +
+      (app ? `&app=${encodeURIComponent(app)}` : '');
+    webRef.current?.injectJavaScript(`window.location.href = ${JSON.stringify(site)}; true;`);
+  }, []);
+
+  useEffect(() => {
+    Linking.getInitialURL().then(handleDeepLink).catch(() => {});
+    const sub = Linking.addEventListener('url', ({ url }) => handleDeepLink(url));
+    return () => sub.remove();
+  }, [handleDeepLink]);
+
   /* ---- dynamic launcher shortcuts ------------------------------------- */
   useEffect(() => {
     if (Platform.OS !== 'android') return undefined;
