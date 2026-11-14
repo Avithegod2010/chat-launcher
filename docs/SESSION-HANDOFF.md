@@ -40,10 +40,14 @@ CI on main: **green** (test + lighthouse best-of-3, perf 98).
   share-in/scheduled/avatar/icon, then import the backup
   (`/tmp/clapk/chat-launcher-backup.json` — reconstructed from screenshots,
   check it matches reality before importing).
-- **Compile-proof build**: submitted overnight for the export feature
-  (expo-file-system/expo-sharing). If it errored, the EAS log
-  (`eas build:view <id>`, logFiles URLs are brotli JSON) has the reason; fix
-  and rebuild before merging PR #5 or cutting a release.
+- **Compile-proof build**: finished clean — the export feature compiles on EAS.
+  Artifact: `dist/app-export-fix-7affae7.apk` (same versionCode 6, commit
+  `7affae7`, not attached to the release — it supersedes nothing; fold it into
+  the next versioned release, or install it instead of `dist/app-release.apk`
+  if you want Export data working from day one).
+  If a future build errors, the EAS log (`eas build:view <id>`, logFiles URLs
+  are brotli JSON) has the reason; fix and rebuild before merging PR #5 or
+  cutting a release.
 - **PR #5**: merge with the next versioned build.
 
 ## Deliberately not touched
