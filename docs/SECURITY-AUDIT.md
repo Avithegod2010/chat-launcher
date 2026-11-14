@@ -322,3 +322,14 @@ Q&A review of the v2.0 feature set.
 | Notification tap navigation | **PASS** (source-verified) |
 | Extension permissions | **PASS** (minimal scope) |
 | Native surfaces (widget/tile/SEND) | **PASS** (minimal permissions, tested generators) |
+
+## v2.0.1 pre-note (2026-11-14): shell export bridge
+
+The Export-data feature gained a shell path: the page base64s the backup and
+posts `{type: 'chatlauncher-export', name, base64}` to the shell, which writes
+it via expo-file-system and opens the share sheet. Hardening: base64 charset
+regex + 12 MB size cap + filename regex (`^[\w.-]{1,80}$`, no traversal) —
+all validated in `saveBackupFile` before any write; the payload content itself
+was produced locally by the page, and the share sheet hands it to the user's
+chosen target, not to any network endpoint. e2e journey 15 verifies the bridge
+end-to-end against a stubbed shell.
