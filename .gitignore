@@ -1,4 +1,5 @@
 # local tooling artifacts
+.v2c/
 .mimosa/
 node_modules/
 *.log
