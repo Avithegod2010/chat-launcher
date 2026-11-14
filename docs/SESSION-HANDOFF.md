@@ -30,7 +30,8 @@ CI on main: **green** (test + lighthouse best-of-3, perf 98).
 5. **Dependabot settled** — #3 merged; #1 obsolete (lockfile already has
    node-forge 1.4.3); #2/#4 applied directly (checkout/setup-node v7). #5
    (react 19.3.1 / RN 0.88.1) intentionally held: CI can't prove an EAS Gradle
-   build; merge it only together with a build that compiles.
+   build; merge it only together with a build that compiles. Its checks went
+   green after the gzip fix; #1 was closed as obsolete.
 
 ## Waiting on you / the morning
 
