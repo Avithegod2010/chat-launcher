@@ -35,21 +35,26 @@ CI on main: **green** (test + lighthouse best-of-3, perf 98).
 
 ## Waiting on you / the morning
 
-- **Phone install** (phone was unavailable overnight): runbook in
-  `docs/PHONE-INSTALL.md` — uninstall old app (signature change), install
-  `dist/app-release.apk`, temporary NextDNS workaround, verify widget/tile/
-  share-in/scheduled/avatar/icon, then import the backup
-  (`/tmp/clapk/chat-launcher-backup.json` — reconstructed from screenshots,
+- **S1 note (2026-11-14):** your commit `51bba6f` was swept onto `main` by a
+  later push — it's already there, nothing to re-push. The two Gradle java
+  daemons exited on their own overnight (RAM at handoff: ~1.4 GB free), so the
+  Rust/MSVC install has headroom now. `docs/PHONE-INSTALL.md` is new since
+  your session started.
+- **Phone install**: **install v2.0.1** — versionCode 7, includes the export
+  fix and the dependency refresh; attached to release v2.0.1 and saved as
+  `dist/app-release.apk` (v2.0.1) once the build lands. The phone's installed
+  v1.0.0 was signed by the OLD account's keystore, so the one-time uninstall
+  still applies. Runbook in `docs/PHONE-INSTALL.md`; backup JSON at
+  `/tmp/clapk/chat-launcher-backup.json` (reconstructed from screenshots —
   check it matches reality before importing).
 - **Compile-proof build**: finished clean — the export feature compiles on EAS.
-  Artifact: `dist/app-export-fix-7affae7.apk` (same versionCode 6, commit
-  `7affae7`, not attached to the release — it supersedes nothing; fold it into
-  the next versioned release, or install it instead of `dist/app-release.apk`
-  if you want Export data working from day one).
+  Artifact: `dist/app-export-fix-7affae7.apk` (superseded by the v2.0.1
+  release build).
   If a future build errors, the EAS log (`eas build:view <id>`, logFiles URLs
-  are brotli JSON) has the reason; fix and rebuild before merging PR #5 or
-  cutting a release.
-- **PR #5**: merge with the next versioned build.
+  are brotli JSON) has the reason; fix and rebuild before merging further
+  dependency bumps or cutting a release.
+- **PR #5**: merged into v2.0.1 (react 19.3.1 / RN 0.88.1 — compiled in the
+  v2.0.1 build).
 
 ## Deliberately not touched
 
