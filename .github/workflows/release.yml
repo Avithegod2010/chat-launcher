@@ -129,7 +129,7 @@ jobs:
           gh release upload "$TAG" sbom-web.json sbom-android.json --clobber || true
 
       - name: Attest build provenance for the APK
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: expo-app/app-release.apk
 
