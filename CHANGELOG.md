@@ -3,6 +3,24 @@
 All notable changes to Chat Launcher. Newest entries are prepended
 automatically by the release workflow from each GitHub Release's notes.
 
+## [v2.0.1] — 2026-11-14
+
+- **Export data works in the Android shell** — backups hand off as base64 over
+  the bridge and open the share sheet (blob downloads silently no-op in the
+  WebView); browsers keep the blob path
+- Dependency refresh: react 19.3.1, react-native 0.88.1, node-forge 1.4.3,
+  actions/checkout v7, actions/setup-node v7, actions/attest-build-provenance v4
+- CI: Lighthouse runs best-of-3 and the dev server gzips (perf 98 on CI)
+- EAS project moved to the `avithegoats-team` account (fresh build quota)
+
+Upgrade notes: this installs straight over the v2.0.0 APK from the same
+account (versionCode 7 > 6). Only installs coming from the pre-migration
+v1.0.0 (old keystore) need the one-time uninstall in `docs/PHONE-INSTALL.md`.
+- Dependency refresh: react 19.3.1, react-native 0.88.1, node-forge 1.4.3,
+  actions/checkout v7, actions/setup-node v7, actions/attest-build-provenance v4
+- CI: Lighthouse runs best-of-3 and the dev server gzips (perf 98 on CI)
+- EAS project moved to the `avithegoats-team` account (fresh build quota)
+
 ## [v2.0.0] — 2026-11-13
 
 The big one: the 20-item "Native + Sync" roadmap, end to end.

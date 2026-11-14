@@ -39,7 +39,7 @@ import {
   withViewTransition,
 } from './ui.js';
 
-const APP_VERSION = '2.0.0';
+const APP_VERSION = '2.0.1';
 const SETTINGS_KEY = 'chatlauncher:settings';
 const SYNC_CFG_KEY = 'chatlauncher:sync';
 const $ = (sel) => document.querySelector(sel);
