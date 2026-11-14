@@ -56,6 +56,8 @@ CI on main: **green** (test + lighthouse best-of-3, perf 98).
 - **PR #5**: merged into v2.0.1 (react 19.3.1 / RN 0.88.1 — compiled in the
   v2.0.1 build).
 
+- **v2.0.2 released + installed on the phone (versionCode 8, in-place upgrade)**: widget taps now deep-link through chatlauncher:// (verified via adb intent → MainActivity), and the scanner gained a vendored jsQR fallback for browsers without BarcodeDetector.
+
 ## Deliberately not touched
 
 - `desktop/` — Session 1's domain (its commit `51bba6f` is already on main).
