@@ -16,8 +16,10 @@ import {
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import * as Contacts from 'expo-contacts';
+import * as FileSystem from 'expo-file-system';
 import * as Notifications from 'expo-notifications';
 import * as QuickActions from 'expo-quick-actions';
+import * as Sharing from 'expo-sharing';
 import { useShareIntent } from 'expo-share-intent';
 import { requestWidgetUpdate } from 'react-native-android-widget';
 import { HomeWidgetView, WIDGET_NAME, saveWidgetItems } from './widgets/HomeWidget';
@@ -120,6 +122,12 @@ export default function App() {
     }
     if (data?.type === 'chatlauncher-schedule') {
       scheduleChatNotification(data).catch(() => {});
+      return;
+    }
+    // The page hands us its backup as base64 (blob downloads no-op in the
+    // WebView): write it to cache and open the share sheet.
+    if (data?.type === 'chatlauncher-export') {
+      saveBackupFile(data).catch(() => {});
     }
   }, []);
 
@@ -295,6 +303,36 @@ export default function App() {
       </Modal>
     </View>
   );
+}
+
+/** Write a page-provided backup (base64) to cache and open the share sheet. */
+async function saveBackupFile({ name, base64 }) {
+  try {
+    if (
+      typeof base64 !== 'string' ||
+      !/^[A-Za-z0-9+/=]+$/.test(base64) ||
+      base64.length > 12 * 1024 * 1024
+    ) {
+      return;
+    }
+    const safeName =
+      typeof name === 'string' && /^[\w.-]{1,80}$/.test(name)
+        ? name
+        : 'chat-launcher-backup.json';
+    const fileUri = `${FileSystem.cacheDirectory}${safeName}`;
+    await FileSystem.writeAsStringAsync(fileUri, base64, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    if (await Sharing.isAvailableAsync()) {
+      await Sharing.shareAsync(fileUri, {
+        mimeType: 'application/json',
+        dialogTitle: 'Chat Launcher backup',
+        UTI: 'public.json',
+      });
+    }
+  } catch {
+    /* nothing we can do from the shell — the page already toasted success */
+  }
 }
 
 /** Schedule the "your chat is due" notification (web asks via the bridge). */

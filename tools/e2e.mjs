@@ -449,6 +449,43 @@ try {
   check('suggest', 'journey crashed', false, String(e).slice(0, 120));
 }
 
+/* Journey 15 — inside the shell, Export data hands base64 to the bridge */
+try {
+  const page = await fresh(BASE + '?number=%2B919876543210');
+  await page.evaluate(() => {
+    // Pretend we're the Android shell (the page trusts this marker).
+    window.ReactNativeWebView = { postMessage: (s) => window.__msgs.push(s) };
+    window.__msgs = [];
+    // Launch once so the backup has content to carry.
+    window.open = () => ({});
+    document.querySelector('.tile[data-app=whatsapp]').click();
+  });
+  await page.evaluate(() => document.getElementById('exportBtn').click());
+  await sleep(400);
+  const r = await page.evaluate(() => {
+    const raw = window.__msgs.find((m) => m.includes('chatlauncher-export'));
+    if (!raw) return { found: false };
+    const p = JSON.parse(raw);
+    const json = JSON.parse(decodeURIComponent(escape(atob(p.base64))));
+    return {
+      found: true,
+      name: p.name,
+      format: json.format,
+      entries: json.history.length,
+      number: json.history[0]?.e164,
+    };
+  });
+  check(
+    'export',
+    'shell export bridges base64 backup (valid JSON, correct name)',
+    r.found && r.format === 'chat-launcher-backup' && r.entries === 1 && /^[\w.-]+\.json$/.test(r.name),
+    JSON.stringify(r),
+  );
+  await page.close();
+} catch (e) {
+  check('export', 'journey crashed', false, String(e).slice(0, 120));
+}
+
 await browser.close();
 
 const failed = results.filter((r) => !r.pass);

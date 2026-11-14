@@ -1912,6 +1912,40 @@ $('#historySearch')?.addEventListener('input', (e) => {
   renderHistory();
 });
 
+/**
+ * UTF-8 safe base64 (btoa alone mangles non-Latin1). Chunks the byte array
+ * so multi-megabyte backups with avatars don't blow the call stack.
+ * @param {string} str
+ */
+function utf8ToBase64(str) {
+  const bytes = new TextEncoder().encode(str);
+  let out = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    out += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(out);
+}
+
+/**
+ * In the Android shell, blob downloads silently no-op (the WebView has no
+ * download listener for blob: URLs) — hand the payload to the shell instead,
+ * which writes it to a file and opens the share sheet.
+ * @param {string} json
+ * @param {string} filename
+ * @returns {boolean} true when the shell took over
+ */
+function exportViaShell(json, filename) {
+  const shell = window.ReactNativeWebView;
+  if (!shell?.postMessage) return false;
+  const base64 = utf8ToBase64(json);
+  try {
+    shell.postMessage(JSON.stringify({ type: 'chatlauncher-export', name: filename, base64 }));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 $('#exportBtn')?.addEventListener('click', () => {
   try {
     const json = exportData({
@@ -1921,10 +1955,15 @@ $('#exportBtn')?.addEventListener('click', () => {
       templates: templates.list(),
       lists: lists.list(),
     });
+    const filename = `chat-launcher-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    if (exportViaShell(json, filename)) {
+      toast(t('backupDone'), { kind: 'good' });
+      return;
+    }
     const blob = new Blob([json], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `chat-launcher-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = filename;
     document.body.append(a);
     a.click();
     a.remove();
