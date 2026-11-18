@@ -19,10 +19,11 @@ cargo tauri dev                  # run
 cargo tauri build                # bundle (nsis/dmg/appimage)
 ```
 
-> Note: this scaffold has not been compiled in this repository's CI — the
-> build machine used for the web/Android work had no Rust toolchain. The
-> config targets Tauri v2; `tauri.conf.json` pins the remote URL and a
-> capability file allows it to talk to the network.
+> Note: this scaffold was never compiled locally — the build machine used for
+> the web/Android work has no Rust toolchain. It is built by
+> `.github/workflows/desktop.yml` on a Windows runner instead: run that
+> workflow (or push to `desktop/**`) and download the artifact — a portable
+> `chat-launcher-desktop.exe`, an NSIS installer, and `SHA256SUMS.txt`.
 
 > Updater: `tauri-plugin-updater` is registered but dormant. The minimal
 > `plugins.updater` section in `tauri.conf.json` (empty `pubkey`, no

@@ -1,0 +1,85 @@
+name: Desktop (Windows)
+
+# Builds desktop/src-tauri on a GitHub runner so the desktop shell never has to
+# be compiled on the laptop (no Rust/MSVC locally, and C: has no room for them).
+# Runs on demand, and on any desktop/** push so breakage is caught immediately.
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'desktop/**'
+      - '.github/workflows/desktop.yml'
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Rust toolchain (MSVC, preinstalled on the runner)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry + target
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri -> target
+          key: desktop-tauri
+
+      - name: Install the Tauri CLI
+        run: npm install -g @tauri-apps/cli@^2
+
+      # frontendDist is desktop/src (a committed static page), so there is no
+      # web build step: tauri copies it and links the Rust binary.
+      - name: Build the desktop shell
+        working-directory: desktop/src-tauri
+        run: tauri build --bundles nsis
+
+      - name: Collect the exe + installer and checksum them
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          cp desktop/src-tauri/target/release/chat-launcher-desktop.exe out/
+          cp desktop/src-tauri/target/release/bundle/nsis/*.exe out/
+          cd out
+          sha256sum ./*.exe > SHA256SUMS.txt
+          ls -la
+          cat SHA256SUMS.txt
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: chat-launcher-desktop-${{ github.run_number }}
+          path: out/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: 'out/*.exe'
+
+      - name: Attach to the release (tags desktop-v* only)
+        if: startsWith(github.ref, 'refs/tags/desktop-v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          gh release view "$TAG" >/dev/null 2>&1 || \
+            gh release create "$TAG" --title "$TAG" --notes "Desktop shell $TAG"
+          gh release upload "$TAG" out/*.exe out/SHA256SUMS.txt --clobber
