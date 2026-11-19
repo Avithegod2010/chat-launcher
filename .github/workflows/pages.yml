@@ -74,6 +74,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${FDROID_KEYSTORE_B64:-}" ]; then
+            echo "built=false" >> "$GITHUB_OUTPUT"
             echo "::warning::FDROID_KEYSTORE_B64 is not set — deploying without /fdroid/repo/"
             exit 0
           fi
@@ -120,6 +121,7 @@ jobs:
           test -f fdroid/repo/index-v1.json
           mkdir -p _site/fdroid
           cp -a fdroid/repo _site/fdroid/repo
+          echo "built=true" >> "$GITHUB_OUTPUT"
           ls -la _site/fdroid/repo
 
       - name: Warn when the F-Droid repo step failed
@@ -148,3 +150,52 @@ jobs:
         id: deployment
         if: ${{ !inputs.dry_run }}
         uses: actions/deploy-pages@v5
+
+      # Prove what users actually get, not just that the artifact was built.
+      - name: Verify the deployed site
+        if: ${{ !inputs.dry_run }}
+        env:
+          SITE: ${{ steps.deployment.outputs.page_url }}
+          FDROID_BUILT: ${{ steps.fdroid.outputs.built }}
+        run: |
+          set -euo pipefail
+
+          fetch() {
+            local url="$1" code=""
+            for _ in $(seq 1 12); do
+              code=$(curl -s -o /dev/null -w '%{http_code}' "$url")
+              [ "$code" = "200" ] && { echo "200 $url"; return 0; }
+              sleep 5
+            done
+            echo "::error::$url returned $code"
+            return 1
+          }
+
+          head_checked() {
+            local url="$1" headers
+            headers=$(curl -sI "$url" | tr -d '\r')
+            echo "$headers" | head -n 1 | grep -q ' 200 ' || {
+              echo "::error::$url is not 200"; return 1; }
+            echo "$headers" | grep -qi '^content-length: [1-9]' || {
+              echo "::error::$url has no content-length"; return 1; }
+            echo "200 $url ($(echo "$headers" | grep -i '^content-length:'))"
+          }
+
+          fetch "$SITE"
+          fetch "${SITE}sw.js"
+          fetch "${SITE}manifest.webmanifest"
+          fetch "${SITE}js/main.js"
+          curl -sf "$SITE" | grep -q "Chat Launcher" || {
+            echo "::error::home page does not mention Chat Launcher"; exit 1; }
+
+          if [ "${FDROID_BUILT:-false}" = "true" ]; then
+            fetch "${SITE}fdroid/repo/index-v1.json"
+            fetch "${SITE}fdroid/repo/index-v1.jar"
+            curl -sf "${SITE}fdroid/repo/index-v1.json" -o /tmp/fdroid-index.json
+            APK=$(node -p "const j=require('/tmp/fdroid-index.json'); const a=j.apps[0]; j.packages[a.packageName][0].apkName")
+            [ -n "$APK" ] || { echo "::error::F-Droid index has no APK"; exit 1; }
+            head_checked "${SITE}fdroid/repo/${APK}"
+            echo "F-Droid index serves ${APK}"
+          else
+            echo "F-Droid repo not published in this run — skipping its checks"
+          fi

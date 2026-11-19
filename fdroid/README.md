@@ -6,13 +6,14 @@
 ## Two honest paths
 
 1. **Official F-Droid inclusion (fdroiddata merge request).** F-Droid builds
-   apps from source in their own runners. This project's Android artifact is
-   produced by **Expo EAS**, and the `Builds` block above records the EAS
-   command as a best-effort attempt — the F-Droid reviewers decide whether
-   that is acceptable for their trusted-builds policy. Expect them to prefer a
-   fully local Gradle build (`expo prebuild` + `gradle assembleRelease`), which
-   this repo can produce on a machine with the Android SDK. The metadata's
-   `Binaries:` line lets F-Droid verify APK signatures even when they build.
+   apps from source in their own runners. The metadata's `Builds:` block now
+   records that path — `expo prebuild` (CNG) followed by a plain
+   `./gradlew assembleRelease` — and `.github/workflows/android-source.yml`
+   builds exactly that on every `expo-app/**` push, so the source is proven
+   buildable without EAS before reviewers ask. The `Binaries:` line points at
+   the EAS-signed release APK so F-Droid can compare what they build with
+   what users install. Reviewers still decide whether they accept the
+   EAS-signed binary as the reference artifact.
 
 2. **Self-hosted F-Droid repo (faster, no gatekeeper).** Chat Launcher
    already publishes one from GitHub Pages:

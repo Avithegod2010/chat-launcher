@@ -38,10 +38,10 @@ Builds:
     versionCode: 8
     commit: v2.0.2
     subdir: expo-app
-    sudo:
-      - npm install -g eas-cli
-    build: eas build --platform android --profile preview --non-interactive
-    prebuild: npm ci --no-fund --no-audit
+    prebuild:
+      - npm ci --no-fund --no-audit
+      - npx expo prebuild --platform android --no-install
+    build: cd android && ./gradlew assembleRelease
 
 AutoUpdateMode: Version
 UpdateCheckMode: Tags

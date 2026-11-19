@@ -1,0 +1,76 @@
+name: Android (source build)
+
+# Proves the Expo shell compiles from source — prebuild (Continuous Native
+# Generation) plus a plain Gradle release build — on a machine that is not
+# EAS. F-Droid's buildserver does exactly this, so this job is the evidence
+# an fdroiddata merge request needs. The shipped APK still comes from EAS;
+# this build is debug-signed and only proves the source is buildable.
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'expo-app/**'
+      - '.github/workflows/android-source.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-source-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gradle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: expo-app/package-lock.json
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Cache Gradle caches and wrapper
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('expo-app/package-lock.json') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      - name: Install JS dependencies
+        working-directory: expo-app
+        run: npm ci --no-fund --no-audit
+
+      - name: Generate the native project (CNG)
+        working-directory: expo-app
+        run: npx expo prebuild --platform android --no-install --clean
+
+      - name: Assemble the release APK
+        working-directory: expo-app/android
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Collect the APK
+        run: |
+          set -euo pipefail
+          cp expo-app/android/app/build/outputs/apk/release/app-release.apk app-release-source.apk
+          sha256sum app-release-source.apk > app-release-source.SHA256SUMS.txt
+          cat app-release-source.SHA256SUMS.txt
+          ls -la app-release-source.apk
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: chat-launcher-source-apk
+          path: |
+            app-release-source.apk
+            app-release-source.SHA256SUMS.txt
+          retention-days: 30
