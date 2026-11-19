@@ -19,7 +19,7 @@ import { exportData, importData } from './backup.js';
 import { createTemplates, expandTemplate } from './templates.js';
 import { createLists, parseMembers, toCsv, parseCsv } from './lists.js';
 import { suggestApp, isConfident } from './suggest.js';
-import { createSync, encryptPayload, mergeRemote } from './sync.js';
+import { createSync, encryptPayload, mergeRemote, syncNow } from './sync.js';
 import { derivePair } from './colors.js';
 import { parseVcf } from './vcf.js';
 import { drawQr } from './qr.js';
@@ -39,7 +39,7 @@ import {
   withViewTransition,
 } from './ui.js';
 
-const APP_VERSION = '2.0.2';
+const APP_VERSION = '2.1.0';
 const SETTINGS_KEY = 'chatlauncher:settings';
 const SYNC_CFG_KEY = 'chatlauncher:sync';
 const $ = (sel) => document.querySelector(sel);
@@ -1197,9 +1197,10 @@ function loadSyncCfg() {
       password: typeof raw.password === 'string' ? raw.password : '',
       passphrase: typeof raw.passphrase === 'string' ? raw.passphrase : '',
       lastSync: Number(raw.lastSync) || 0,
+      autoSync: raw.autoSync !== false,
     };
   } catch {
-    return { url: '', username: '', password: '', passphrase: '', lastSync: 0 };
+    return { url: '', username: '', password: '', passphrase: '', lastSync: 0, autoSync: true };
   }
 }
 
@@ -1223,6 +1224,11 @@ function renderSyncSection() {
   $('#syncUser').value = syncCfg.username;
   $('#syncPass').value = syncCfg.password;
   $('#syncPhrase').value = syncCfg.passphrase;
+  const auto = $('#autoSyncToggle');
+  if (auto) {
+    auto.classList.toggle('on', syncCfg.autoSync !== false);
+    auto.setAttribute('aria-checked', String(syncCfg.autoSync !== false));
+  }
   if (syncCfg.lastSync) {
     syncStatus(t('syncLast', { when: new Date(syncCfg.lastSync).toLocaleString() }));
   }
@@ -1236,6 +1242,35 @@ function syncPayload() {
     templates: templates.list(),
     lists: lists.list(),
   };
+}
+
+/** Validate a pulled payload the way a backup import does — never trust it. */
+function sanitizeBackup(payload) {
+  return importData(JSON.stringify({ format: 'chat-launcher-backup', version: 1, ...payload }));
+}
+
+/**
+ * Apply a merged payload. Auto-sync deliberately keeps local settings: a
+ * background sync must not change someone's theme under them.
+ */
+function applyMerged(result, added, { applySettings = true } = {}) {
+  if (applySettings && result?.settings) {
+    settings = { ...settings, ...result.settings };
+    saveSettings();
+    applyTheme();
+    applyAccent();
+    applyTextScale();
+    applyContrast();
+  }
+  if (added.history + added.templates + added.lists > 0) {
+    renderTiles();
+    renderHistory();
+    renderTemplateList();
+    renderListList();
+    renderTemplateChips();
+  }
+  syncCfg.lastSync = Date.now();
+  saveSyncCfg();
 }
 
 function readSyncInputs() {
@@ -1280,32 +1315,67 @@ $('#syncPull')?.addEventListener('click', async () => {
     );
     return;
   }
-  // The payload came from our own encrypted blob, but validate it like a
-  // backup anyway — never trust data, even your own.
-  const result = importData(
-    JSON.stringify({ format: 'chat-launcher-backup', version: 1, ...res.payload }),
-  );
+  const result = sanitizeBackup(res.payload);
   if (!result.ok) {
     syncStatus(t('syncFail', { err: result.error }), 'bad');
     return;
   }
   const added = mergeRemote(result, { history, templates, lists });
-  if (result.settings) {
-    settings = { ...settings, ...result.settings };
-    saveSettings();
-    applyTheme();
-    applyAccent();
-    applyTextScale();
-    applyContrast();
-  }
-  renderTiles();
-  renderHistory();
-  renderTemplateList();
-  renderListList();
-  syncCfg.lastSync = Date.now();
-  saveSyncCfg();
+  applyMerged(result, added);
   syncStatus(t('syncMerged', { n: added.history }), 'good');
 });
+
+/** One two-way pass, shared by the button and the launch-time auto-sync. */
+async function runTwoWaySync(cfg) {
+  return syncNow({
+    transport: sync,
+    cfg,
+    sanitize: sanitizeBackup,
+    stores: { history, templates, lists },
+    snapshot: syncPayload,
+  });
+}
+
+$('#syncNow')?.addEventListener('click', async () => {
+  const cfg = readSyncInputs();
+  if (!cfg.url || !cfg.passphrase) {
+    syncStatus(t('syncNeedUrlPass'), 'bad');
+    return;
+  }
+  syncStatus(t('syncWorking'));
+  const res = await runTwoWaySync(cfg);
+  if (!res.ok) {
+    syncStatus(t('syncFail', { err: res.error }), 'bad');
+    return;
+  }
+  applyMerged({ settings: res.settings }, res.added);
+  syncStatus(t('syncMerged', { n: res.added.history }), 'good');
+});
+
+$('#autoSyncToggle')?.addEventListener('click', () => {
+  syncCfg.autoSync = syncCfg.autoSync === false;
+  saveSyncCfg();
+  renderSyncSection();
+});
+
+/**
+ * Pull-merge-push once per launch when sync is configured and enabled.
+ * Silent on failure (the settings row keeps the last-sync line) and silent
+ * when nothing changed; local settings are never overwritten here.
+ */
+async function autoSyncOnLaunch() {
+  if (syncCfg.autoSync === false || !syncCfg.url || !syncCfg.passphrase) return;
+  if (!navigator.onLine) return;
+  try {
+    const res = await runTwoWaySync(syncCfg);
+    if (!res.ok) return;
+    applyMerged({ settings: res.settings }, res.added, { applySettings: false });
+    const n = res.added.history + res.added.templates + res.added.lists;
+    if (n > 0) toast(t('syncMerged', { n: res.added.history }), { kind: 'good' });
+  } catch {
+    /* offline or the server is unreachable — try again next launch */
+  }
+}
 
 ['syncUrl', 'syncUser', 'syncPass', 'syncPhrase'].forEach((id) => {
   $(`#${id}`)?.addEventListener('change', readSyncInputs);
@@ -2399,6 +2469,8 @@ function init() {
   if (!('ontouchstart' in window)) phoneInput.focus();
   // A number queued offline last session can be opened now.
   if (navigator.onLine && queue.list().length) offerQueued();
+  // Quietly converge with the user's sync server once the UI is up.
+  setTimeout(autoSyncOnLaunch, 1200);
 }
 
 init();

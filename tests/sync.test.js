@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { encryptPayload, decryptPayload, createSync, mergeRemote } from '../js/sync.js';
+import { encryptPayload, decryptPayload, createSync, mergeRemote, syncNow } from '../js/sync.js';
 
 const PASS = 'correct horse battery staple';
 
@@ -111,4 +111,130 @@ test('mergeRemote unions remote-only entries, keeps newer local copies', () => {
   assert.equal(added.lists, 1);
   assert.equal(history.items.length, 2);
   assert.equal(history.items.find((x) => x.e164 === '15551234567').label, 'local', 'local newer kept');
+});
+
+const fakeStore = (initial = []) => {
+  const store = {
+    items: initial,
+    list() {
+      return this.items;
+    },
+    replaceAll(next) {
+      this.items = next;
+      return next;
+    },
+  };
+  return store;
+};
+
+const syncCfg = { url: 'https://dav.example.com/x.json', passphrase: PASS };
+
+test('syncNow pushes when the server has nothing yet (404)', async () => {
+  const pushes = [];
+  const transport = {
+    pull: async () => ({ ok: false, status: 404 }),
+    push: async (_cfg, envelope) => {
+      pushes.push(envelope);
+      return { ok: true, status: 201 };
+    },
+  };
+  const res = await syncNow({
+    transport,
+    cfg: syncCfg,
+    sanitize: () => {
+      throw new Error('a 404 has nothing to sanitize');
+    },
+    stores: { history: fakeStore(), templates: fakeStore(), lists: fakeStore() },
+    snapshot: () => ({ history: [{ e164: '15551234567' }] }),
+    now: () => 42,
+  });
+  assert.equal(res.ok, true);
+  assert.equal(res.at, 42);
+  assert.deepEqual(res.added, { history: 0, templates: 0, lists: 0 });
+  assert.equal(pushes.length, 1);
+  assert.equal(pushes[0].format, 'chat-launcher-sync');
+});
+
+test('syncNow merges the remote copy and pushes the union back', async () => {
+  const history = fakeStore([{ e164: '15551234567', lastUsed: 100 }]);
+  const templates = fakeStore([]);
+  const lists = fakeStore([]);
+  let pushed;
+  const transport = {
+    pull: async () => ({
+      ok: true,
+      payload: {
+        history: [
+          { e164: '15551234567', lastUsed: 100 },
+          { e164: '919876543210', lastUsed: 5 },
+        ],
+        templates: [],
+        lists: [],
+      },
+    }),
+    push: async (_cfg, envelope) => {
+      pushed = await decryptPayload(envelope, PASS);
+      return { ok: true, status: 204 };
+    },
+  };
+  const res = await syncNow({
+    transport,
+    cfg: syncCfg,
+    sanitize: (payload) => ({ ok: true, ...payload }),
+    stores: { history, templates, lists },
+    snapshot: () => ({ history: history.list(), templates: templates.list(), lists: lists.list() }),
+  });
+  assert.equal(res.ok, true);
+  assert.equal(res.added.history, 1);
+  assert.equal(history.items.length, 2);
+  assert.equal(pushed.history.length, 2, 'push carries the merged union, not the pre-merge copy');
+});
+
+test('syncNow never pushes when the pull or the validation fails', async () => {
+  let pushes = 0;
+  const transport = {
+    pull: async () => ({ ok: false, status: 500, error: 'server down' }),
+    push: async () => {
+      pushes++;
+      return { ok: true };
+    },
+  };
+  const res = await syncNow({
+    transport,
+    cfg: syncCfg,
+    sanitize: () => ({ ok: true }),
+    stores: { history: fakeStore(), templates: fakeStore(), lists: fakeStore() },
+    snapshot: () => ({}),
+  });
+  assert.equal(res.ok, false);
+  assert.match(res.error, /server down/);
+  assert.equal(pushes, 0);
+
+  const badPayload = await syncNow({
+    transport: { pull: async () => ({ ok: true, payload: {} }), push: transport.push },
+    cfg: syncCfg,
+    sanitize: () => ({ ok: false, error: 'hostile backup' }),
+    stores: { history: fakeStore(), templates: fakeStore(), lists: fakeStore() },
+    snapshot: () => ({}),
+  });
+  assert.equal(badPayload.ok, false);
+  assert.match(badPayload.error, /hostile/);
+  assert.equal(pushes, 0);
+});
+
+test('syncNow reports a failed push but keeps the merge counts', async () => {
+  const history = fakeStore([]);
+  const res = await syncNow({
+    transport: {
+      pull: async () => ({ ok: true, payload: { history: [{ e164: '15551234567', lastUsed: 1 }] } }),
+      push: async () => ({ ok: false, status: 507 }),
+    },
+    cfg: syncCfg,
+    sanitize: (payload) => ({ ok: true, ...payload }),
+    stores: { history, templates: fakeStore(), lists: fakeStore() },
+    snapshot: () => ({ history: history.list() }),
+  });
+  assert.equal(res.ok, false);
+  assert.equal(res.added.history, 1);
+  assert.match(res.error, /507/);
 });

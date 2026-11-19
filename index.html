@@ -207,7 +207,12 @@
         <input id="syncPhrase" class="text-input" type="password" placeholder="Encryption passphrase (never leaves this device)" aria-label="Encryption passphrase" autocomplete="off">
       </div>
       <p class="sync-status" id="syncStatus"></p>
+      <div class="setting-row-inline">
+        <span data-i18n="syncAuto">Auto-sync on launch</span>
+        <button id="autoSyncToggle" class="switch on" type="button" role="switch" aria-checked="true" data-i18n-aria="syncAuto" aria-label="Auto-sync on launch"></button>
+      </div>
       <div class="manage-actions">
+        <button id="syncNow" class="btn" type="button" data-i18n="syncNow">Sync now (both ways)</button>
         <button id="syncPush" class="btn" type="button" data-i18n="syncPush">Push (encrypt + upload)</button>
         <button id="syncPull" class="btn" type="button" data-i18n="syncPull">Pull (download + merge)</button>
       </div>

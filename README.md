@@ -27,7 +27,7 @@ Every messenger hides chat-by-number behind the same dance: save the contact, re
 - 📷 **QR share + scanner** — generate a code for the current number, or scan a QR/MeCard/barcode with the camera to fill it in
 - 📢 **Broadcast lists** — named groups of numbers, CSV import/export, launch the whole list on any target
 - 🧨 **Bulk launch** — paste a list of numbers, open them one by one or all at once
-- 🔐 **End-to-end encrypted sync** — one passphrase → AES-GCM; push/pull to *your own* WebDAV server (Nextcloud works); the server only ever sees ciphertext
+- 🔐 **End-to-end encrypted sync** — one passphrase → AES-GCM; push/pull to *your own* WebDAV server (Nextcloud works), or let it **auto-sync once per launch**; the server only ever sees ciphertext
 - ⌨️ **Command palette** — `Ctrl/⌘+K` for every action: launch apps, switch language/theme, run history entries
 - ⏰ **Scheduled chats** (Android shell) — a notification at your chosen time opens the chat
 - 📴 **Offline queue** — numbers shared in while offline wait for connectivity, then launch with one tap
@@ -96,7 +96,7 @@ node tools/bundle-budget.mjs
 node tools/fdroid-lint.mjs
 ```
 
-104 tests cover phone normalization (E.164, trunk zeros, paste parsing, per-country lengths and grouping), every platform's deep-link shape, exactly-once message encoding, history (dedup, pins, notes, last-app, capacity, corrupt-JSON recovery), stats (incl. hour-of-day buckets), backups (round-trip + hostile imports), vCard parsing, the offline queue, color math, **message templates, broadcast lists + CSV, the suggestion engine, the E2E sync crypto (round-trip, tamper, wrong passphrase, WebDAV stubs), and i18n completeness across all twelve languages** — plus seeded property tests that fuzz ~1,700 generated inputs. 11 adversarial probes drive the app with hostile inputs (XSS payloads, poisoned storage, CSP checks, hostile palette labels, shell-bridge message floods); 17 e2e journeys exercise launch, search, i18n/RTL, export/import, contact import, the unusual-length confirm, dialog accessibility, the command palette, templates, broadcast lists, the scanner, large-text/contrast modes and the suggestion badge.
+109 tests cover phone normalization (E.164, trunk zeros, paste parsing, per-country lengths and grouping), every platform's deep-link shape, exactly-once message encoding, history (dedup, pins, notes, last-app, capacity, corrupt-JSON recovery), stats (incl. hour-of-day buckets), backups (round-trip + hostile imports), vCard parsing, the offline queue, color math, **message templates, broadcast lists + CSV, the suggestion engine, the E2E sync crypto (round-trip, tamper, wrong passphrase, WebDAV stubs) including the two-way auto-sync pass, and i18n completeness across all twelve languages** — plus seeded property tests that fuzz ~1,700 generated inputs. 11 adversarial probes drive the app with hostile inputs (XSS payloads, poisoned storage, CSP checks, hostile palette labels, shell-bridge message floods); 17 e2e journeys exercise launch, search, i18n/RTL, export/import, contact import, the unusual-length confirm, dialog accessibility, the command palette, templates, broadcast lists, the scanner, large-text/contrast modes and the suggestion badge.
 
 ## Repo layout
 

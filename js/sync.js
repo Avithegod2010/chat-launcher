@@ -234,3 +234,44 @@ export function mergeRemote(remote, stores) {
   }
   return { history: addedHistory, templates: addedTemplates, lists: addedLists };
 }
+
+/**
+ * One two-way sync pass: pull (if the server has something), merge it into
+ * the local stores, then push the union back so both sides converge.
+ *
+ * `sanitize` must validate the pulled payload exactly like a backup import
+ * and return that import's result shape (`{ok, history, templates, lists,
+ * settings, …}`) — remote data is never trusted, even when it decrypts.
+ *
+ * @param {object} args
+ * @param {{pull: Function, push: Function}} args.transport createSync()
+ * @param {{url: string, passphrase: string, username?: string, password?: string}} args.cfg
+ * @param {(payload: unknown) => {ok: boolean, error?: string, [k: string]: any}} args.sanitize
+ * @param {{history: any, templates: any, lists: any}} args.stores
+ * @param {() => object} args.snapshot read after the merge, so the push carries the union
+ * @param {() => number} [args.now] injectable for tests
+ */
+export async function syncNow({ transport, cfg, sanitize, stores, snapshot, now = Date.now }) {
+  const pulled = await transport.pull(cfg, cfg.passphrase);
+  if (!pulled.ok && pulled.status !== 404) {
+    return { ok: false, error: pulled.error ?? `HTTP ${pulled.status}` };
+  }
+
+  let added = { history: 0, templates: 0, lists: 0 };
+  let remoteSettings;
+  if (pulled.ok) {
+    const checked = sanitize(pulled.payload);
+    if (!checked?.ok) {
+      return { ok: false, error: checked?.error ?? 'invalid sync payload' };
+    }
+    added = mergeRemote(checked, stores);
+    remoteSettings = checked.settings;
+  }
+
+  const pushed = await transport.push(cfg, await encryptPayload(snapshot(), cfg.passphrase));
+  if (!pushed.ok) {
+    return { ok: false, error: pushed.error ?? `HTTP ${pushed.status}`, added };
+  }
+
+  return { ok: true, added, settings: remoteSettings, at: now() };
+}

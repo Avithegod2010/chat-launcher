@@ -3,6 +3,41 @@
 All notable changes to Chat Launcher. Newest entries are prepended
 automatically by the release workflow from each GitHub Release's notes.
 
+## [v2.1.0] — 2026-11-19
+
+### Web app
+- **Auto-sync on launch** — with encrypted sync configured, the app now pulls,
+  merges and pushes once per launch in the background, so two devices converge
+  without pressing anything. A background pass never overwrites the local
+  theme/accent; the new switch in Settings turns it off
+- **"Sync now" button** — one two-way pass (pull → merge → push) for the manual
+  case, sharing the same code path
+- New `syncNow()` in `js/sync.js` with 4 unit tests: first-run 404 still
+  pushes, the push carries the merged union, a failed pull or rejected payload
+  never pushes, and a failed push keeps the merge counts
+- 109 tests total (was 104)
+
+### Desktop shell
+- **Auto-update** — the Windows app checks the signed `desktop-latest` feed a
+  few seconds after launch, verifies the minisign signature and installs the
+  NSIS updater package; the tray gained **Check for updates…** with a native
+  result dialog. Release builds publish `latest.json` plus the signed
+  `.nsis.zip`
+- Version 2.1.0
+
+### Distribution
+- F-Droid metadata `Builds:` now records the from-source path
+  (`expo prebuild` + `./gradlew assembleRelease`), and a new **Android (source
+  build)** workflow proves it on every `expo-app/**` push — the evidence an
+  fdroiddata merge request needs
+- Pages deployments verify themselves after deploy: site shell, service
+  worker, manifest, and the F-Droid index plus its APK must all return 200
+  before the run is green
+
+The Android shell remains at 2.0.2 (versionCode 8): this release is web and
+desktop only. A new APK is only needed when `expo-app/` changes; the shell
+loads the live site.
+
 ## [v2.0.2] — 2026-11-14
 
 - **Widget taps fixed** — chips deep-link through the app's own
