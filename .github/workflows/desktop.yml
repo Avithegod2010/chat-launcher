@@ -56,29 +56,30 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: tauri build --bundles nsis
 
-      - name: Collect the exe, installer and updater package
+      - name: Collect the exe, installer and updater signature
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p out
           cp desktop/src-tauri/target/release/chat-launcher-desktop.exe out/
           cp desktop/src-tauri/target/release/bundle/nsis/*-setup.exe out/
-          cp desktop/src-tauri/target/release/bundle/nsis/*.nsis.zip out/
-          cp desktop/src-tauri/target/release/bundle/nsis/*.nsis.zip.sig out/
+          # Tauri's Windows updater artifact is the NSIS setup exe itself plus
+          # its minisign signature (there is no .nsis.zip on Windows).
+          cp desktop/src-tauri/target/release/bundle/nsis/*-setup.exe.sig out/
           cd out
-          sha256sum ./*.exe ./*.nsis.zip > SHA256SUMS.txt
+          sha256sum ./*.exe > SHA256SUMS.txt
           ls -la
           cat SHA256SUMS.txt
 
       # The updater reads this feed: one platform entry pointing at the
-      # desktop-latest copy of the signed zip.
+      # desktop-latest copy of the signed installer.
       - name: Generate latest.json
         shell: bash
         run: |
           set -euo pipefail
           VERSION=$(node -p "require('./desktop/src-tauri/tauri.conf.json').version")
-          ZIP=$(basename "$(ls out/*.nsis.zip)")
-          ENCODED=$(node -e "console.log(encodeURIComponent(process.argv[1]))" "$ZIP")
+          SETUP=$(basename "$(ls out/*-setup.exe)")
+          ENCODED=$(node -e "console.log(encodeURIComponent(process.argv[1]))" "$SETUP")
           URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/desktop-latest/${ENCODED}"
           node -e '
             const fs = require("fs");
@@ -94,7 +95,7 @@ jobs:
                 },
               },
             }, null, 2));
-          ' "$VERSION" "out/${ZIP}.sig" "$URL" out/latest.json
+          ' "$VERSION" "out/${SETUP}.sig" "$URL" out/latest.json
           cat out/latest.json
 
       - name: Upload build artifacts
@@ -119,7 +120,7 @@ jobs:
           TAG="${GITHUB_REF#refs/tags/}"
           gh release view "$TAG" >/dev/null 2>&1 || \
             gh release create "$TAG" --title "$TAG" --notes "Desktop shell $TAG"
-          gh release upload "$TAG" out/*.exe out/*.nsis.zip out/*.nsis.zip.sig out/SHA256SUMS.txt --clobber
+          gh release upload "$TAG" out/*.exe out/*-setup.exe.sig out/SHA256SUMS.txt --clobber
 
       # Rolling feed the app polls. Published from main and version tags only —
       # never from a feature branch, which would ship an untested build to users.
@@ -135,4 +136,4 @@ jobs:
             gh release create "$TAG" \
               --title "Chat Launcher Desktop — latest" \
               --notes "Rolling feed used by the desktop app's built-in updater. Versioned installers are attached to each desktop-v* release."
-          gh release upload "$TAG" out/*.nsis.zip out/*.nsis.zip.sig out/latest.json --clobber
+          gh release upload "$TAG" out/*.exe out/*-setup.exe.sig out/latest.json --clobber

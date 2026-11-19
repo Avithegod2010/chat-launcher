@@ -22,7 +22,7 @@ automatically by the release workflow from each GitHub Release's notes.
   few seconds after launch, verifies the minisign signature and installs the
   NSIS updater package; the tray gained **Check for updates…** with a native
   result dialog. Release builds publish `latest.json` plus the signed
-  `.nsis.zip`
+  installer (`*-setup.exe.sig`)
 - Version 2.1.0
 
 ### Distribution
