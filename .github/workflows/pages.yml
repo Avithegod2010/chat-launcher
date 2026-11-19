@@ -87,6 +87,9 @@ jobs:
           echo "F-Droid repo source: v${VERSION} (versionCode ${CODE}) from ${APK_URL}"
 
           mkdir -p fdroid/repo
+          # Repo icon (the little picture next to the repo name in the client)
+          mkdir -p fdroid/repo/icons
+          cp icons/icon-512.png fdroid/repo/icons/icon.png
           curl -fsSL --retry 3 -o "fdroid/repo/${PKG}_${CODE}.apk" "$APK_URL"
 
           python3 -m venv /tmp/fdroid-venv
