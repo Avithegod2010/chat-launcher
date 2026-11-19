@@ -185,13 +185,13 @@ jobs:
           fetch "${SITE}sw.js"
           fetch "${SITE}manifest.webmanifest"
           fetch "${SITE}js/main.js"
-          curl -sf "$SITE" | grep -q "Chat Launcher" || {
+          curl -sf --compressed "$SITE" | grep -q "Chat Launcher" || {
             echo "::error::home page does not mention Chat Launcher"; exit 1; }
 
           if [ "${FDROID_BUILT:-false}" = "true" ]; then
             fetch "${SITE}fdroid/repo/index-v1.json"
             fetch "${SITE}fdroid/repo/index-v1.jar"
-            curl -sf "${SITE}fdroid/repo/index-v1.json" -o /tmp/fdroid-index.json
+            curl -sf --compressed "${SITE}fdroid/repo/index-v1.json" -o /tmp/fdroid-index.json
             APK=$(node -p "const j=require('/tmp/fdroid-index.json'); const a=j.apps[0]; j.packages[a.packageName][0].apkName")
             [ -n "$APK" ] || { echo "::error::F-Droid index has no APK"; exit 1; }
             head_checked "${SITE}fdroid/repo/${APK}"
