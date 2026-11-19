@@ -25,10 +25,18 @@ cargo tauri build                # bundle (nsis/dmg/appimage)
 > workflow (or push to `desktop/**`) and download the artifact — a portable
 > `chat-launcher-desktop.exe`, an NSIS installer, and `SHA256SUMS.txt`.
 
-> Updater: `tauri-plugin-updater` is registered but dormant. The minimal
-> `plugins.updater` section in `tauri.conf.json` (empty `pubkey`, no
-> endpoints) is required for the plugin to initialize at startup. Fill in a
-> real `pubkey` + `endpoints` when desktop auto-update is actually shipped.
+> Updater: `tauri-plugin-updater` is live. Builds are signed with the
+> `TAURI_SIGNING_PRIVATE_KEY` secret; the app checks the
+> `desktop-latest` release feed (`latest.json`) about eight seconds after
+> launch, verifies the minisign signature against the pubkey in
+> `tauri.conf.json` and installs the NSIS package. `desktop.yml` publishes
+> that feed from `main` and from `desktop-v*` tags — never from feature
+> branches. Tray → **Check for updates…** runs the same check on demand and
+> reports through a native dialog.
+>
+> The private key and its password live in the repository secrets and in
+> `dist/desktop-updater/` locally (gitignored). Losing them means existing
+> installs can no longer verify updates and users must reinstall by hand.
 
 ## Why not Electron?
 
