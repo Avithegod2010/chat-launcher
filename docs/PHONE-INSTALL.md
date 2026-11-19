@@ -1,15 +1,16 @@
-# Installing the v2.0.0 APK on the phone
+# Installing / updating the Chat Launcher APK
 
-The APK is attached to [release v2.0.0](https://github.com/Avithegod2010/chat-launcher/releases/tag/v2.0.0)
-(also saved locally at `dist/app-release.apk`, SHA-256 verified against
-`dist/SHA256SUMS.txt`).
+Current install target: **v2.0.2** (versionCode 8). It is attached to
+[release v2.0.2](https://github.com/Avithegod2010/chat-launcher/releases/tag/v2.0.2)
+and kept locally at `dist/app-release.apk`, SHA-256 verified against
+`dist/SHA256SUMS.txt`.
 
-**It cannot upgrade the installed app in place**: the new account's keystore is
-different from the old one, so Android refuses the signature mismatch. The old
-app must be uninstalled first, which wipes its local data (history, settings —
-it's WebView storage, bound to the app). A reconstructed backup is ready at
-`/tmp/clapk/chat-launcher-backup.json` (3 history entries, emerald accent,
-3 enabled tiles) — re-derive or edit it if the real data differs.
+## Upgrade rules
+
+| Installed version | Action |
+|---|---|
+| v2.0.0 – v2.0.2 (all signed by the `avithegoats-team` keystore) | **Install straight over it** — no uninstall, data kept |
+| v1.0.0 (old account's keystore) | One-time **uninstall first** — signature mismatch; this wipes WebView storage (history, settings), so import a backup afterwards |
 
 ## Steps (wireless adb)
 
@@ -19,39 +20,40 @@ export PATH="/usr/bin:/mingw64/bin:/c/Program Files/Git/cmd:/e/Dev/nodejs:/e/Dev
 # 1. Connect (mDNS entry usually survives; else adb connect <ip:port>)
 adb devices
 
-# 2. OPTIONAL — temporarily unblock github.io (NextDNS private DNS blocks it
-#    on this network). We restore it in step 6.
+# 2. ONLY if this network blocks github.io (NextDNS private DNS), unblock
+#    temporarily. Restore it in step 4.
 adb -s <serial> shell settings put global private_dns_mode opportunistic
 
-# 3. Uninstall the old app (DATA LOSS — the backup below restores it)
-adb -s <serial> uninstall io.github.avithegod2010.chatlauncher
+# 3. Install. Add the uninstall line only when coming from v1.0.0:
+#    adb -s <serial> uninstall io.github.avithegod2010.chatlauncher
+adb -s <serial> install -r dist/app-release.apk
 
-# 4. Install the new APK
-adb -s <serial> install dist/app-release.apk
-
-# 5. First launch — let the service worker install the live v2.0.0 site
+#    First launch (twice, so the service-worker update settles):
 adb -s <serial> shell am start -n io.github.avithegod2010.chatlauncher/.MainActivity
-sleep 15   # repeat once more so the SW update settles
+sleep 15
 adb -s <serial> shell am force-stop io.github.avithegod2010.chatlauncher
 adb -s <serial> shell am start -n io.github.avithegod2010.chatlauncher/.MainActivity
 
-# 6. Restore the user's DNS filtering
+# 4. Restore DNS filtering (only if step 2 was used)
 adb -s <serial> shell settings put global private_dns_mode hostname
 adb -s <serial> shell settings put global private_dns_specifier ADNS-aeaeb1.dns.nextdns.io
 ```
 
 ## Then verify hands-on
 
-- Launcher icon: gradient square, white bubble, **3 dots** (the fixed artwork)
+- Launcher icon: gradient square, white bubble, **3 dots**
 - Long-press the app icon: shortcuts (WhatsApp / Telegram / SMS)
-- Home screen: add the **Chat Launcher widget** (4×2, shows top targets)
-- Quick Settings shade: **Chat Launcher tile**
+- Home screen: the **Chat Launcher widget** (4×2) lists top targets and its
+  chips deep-link through `chatlauncher://`
+- Quick Settings shade: **Chat Launcher tile** opens the app
 - Share a text containing a number from another app → lands in the launcher
-- In-app: Settings → **Import data** → pick the backup JSON
-- Settings footer shows `Chat Launcher v2.0.0`
+- In-app: **Settings → Export data** opens the Android share sheet (v2.0.1+)
+- In-app: **Settings → Scan** works even without `BarcodeDetector` (v2.0.2+)
+- Settings footer shows `Chat Launcher v2.0.2`
 
-## Known issue (fix queued)
+## Notes
 
-The shell's WebView does not handle blob downloads — the in-app **Export data**
-button silently does nothing on Android. The React Native WebView needs a
-`onFileDownload` handler (`webview.setDownloadListener`) to support it.
+- The shell loads the live site, so web-only changes ship without a new APK.
+  A new APK is only needed when `expo-app/` (native side) changes.
+- Restored data comes from a backup JSON (Settings → Import data), validated
+  field-by-field on import.
