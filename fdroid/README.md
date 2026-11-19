@@ -14,11 +14,15 @@
    this repo can produce on a machine with the Android SDK. The metadata's
    `Binaries:` line lets F-Droid verify APK signatures even when they build.
 
-2. **Self-hosted F-Droid repo (faster, no gatekeeper).** Serve an
-   `fdroid` repo from GitHub Pages: publish `app-release.apk`, generate
-   `index-v1.json` with `fdroid update`, and sign it with a repo key stored
-   as a GitHub Actions secret. That gives users a real auto-updating F-Droid
-   client feed without Play Store or EAS dependency.
+2. **Self-hosted F-Droid repo (faster, no gatekeeper).** Chat Launcher
+   already publishes one from GitHub Pages:
+   <https://avithegod2010.github.io/chat-launcher/fdroid/repo>.
+   `.github/workflows/pages.yml` builds it on every push/release — it
+   downloads the release APK, runs `fdroid update` with a repo key stored as
+   GitHub Actions secrets, and deploys the signed index with the site. See
+   [`docs/FDROID-REPO.md`](../docs/FDROID-REPO.md) for the client steps and
+   the key-backup rules. That gives users a real auto-updating F-Droid client
+   feed without Play Store or EAS dependency.
 
 ## Lint locally
 

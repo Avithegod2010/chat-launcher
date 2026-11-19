@@ -1,0 +1,147 @@
+name: Pages
+
+# Publishes the PWA (and, when the F-Droid signing secrets are present, a
+# signed self-hosted F-Droid repo under /fdroid/repo/) to GitHub Pages.
+#
+# This replaces the legacy "deploy from a branch" Pages source. A legacy
+# branch deploy cannot carry the ~70 MB APK without committing it to git, so
+# the site is assembled as a workflow artifact instead: `git archive` of the
+# tracked tree plus the generated F-Droid repo.
+#
+# Required repository secrets for the F-Droid half:
+#   FDROID_KEYSTORE_B64   base64 of the PKCS#12 repo keystore
+#   FDROID_KEYSTORE_PASS  its store/key password (same for both)
+# Without them the site still deploys; the F-Droid step warns and is skipped.
+
+on:
+  push:
+    branches: [main]
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Build the site artifact but do not deploy
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    env:
+      # Job-level so step `if` can test it (the secrets context is not
+      # available inside `if`).
+      FDROID_KEYSTORE_B64: ${{ secrets.FDROID_KEYSTORE_B64 }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Release events check out the tag; keep deploying the site from
+          # main in that case. Branch/PR dispatches test their own tree.
+          ref: ${{ github.event_name == 'release' && 'main' || github.ref }}
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Assemble the site from the tracked tree
+        run: |
+          set -euo pipefail
+          mkdir -p _site
+          git archive HEAD | tar -x -C _site
+          test -f _site/index.html
+          test -f _site/sw.js
+
+      - name: Generate the self-hosted F-Droid repo
+        id: fdroid
+        # Never let the F-Droid half block the web deployment: the site is the
+        # primary artifact. A failure surfaces as a warning on the run.
+        continue-on-error: true
+        env:
+          FDROID_KEYSTORE_PASS: ${{ secrets.FDROID_KEYSTORE_PASS }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          if [ -z "${FDROID_KEYSTORE_B64:-}" ]; then
+            echo "::warning::FDROID_KEYSTORE_B64 is not set — deploying without /fdroid/repo/"
+            exit 0
+          fi
+          VERSION=$(node -p "require('./expo-app/app.json').expo.version")
+          # A release event names the version being published; otherwise the
+          # current app.json version is the newest APK.
+          if [ -n "${RELEASE_TAG:-}" ]; then VERSION="${RELEASE_TAG#v}"; fi
+          CODE=$(node -p "require('./expo-app/app.json').expo.android.versionCode")
+          PKG=$(node -p "require('./expo-app/app.json').expo.android.package")
+          APK_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/v${VERSION}/app-release.apk"
+          echo "F-Droid repo source: v${VERSION} (versionCode ${CODE}) from ${APK_URL}"
+
+          mkdir -p fdroid/repo
+          curl -fsSL --retry 3 -o "fdroid/repo/${PKG}_${CODE}.apk" "$APK_URL"
+
+          python3 -m venv /tmp/fdroid-venv
+          /tmp/fdroid-venv/bin/pip install --quiet --disable-pip-version-check fdroidserver
+
+          echo "$FDROID_KEYSTORE_B64" | base64 -d > /tmp/fdroid-keystore.p12
+          OWNER=$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
+          NAME=${GITHUB_REPOSITORY#*/}
+          REPO_URL="https://${OWNER}.github.io/${NAME}/fdroid/repo"
+          echo "Repo URL: ${REPO_URL}"
+          cat > fdroid/config.yml <<EOF
+          repo_url: ${REPO_URL}
+          repo_name: Chat Launcher
+          repo_description: |-
+            Self-hosted builds of Chat Launcher — open any phone number's chat
+            directly in WhatsApp, Telegram, Signal, SMS and more.
+          archive_older: 0
+          keystore: /tmp/fdroid-keystore.p12
+          repo_keyalias: chatlauncher
+          keystorepass: ${FDROID_KEYSTORE_PASS}
+          keypass: ${FDROID_KEYSTORE_PASS}
+          EOF
+
+          ( cd fdroid && /tmp/fdroid-venv/bin/fdroid update --verbose )
+          rm -f fdroid/config.yml /tmp/fdroid-keystore.p12
+
+          test -f fdroid/repo/index-v1.jar
+          test -f fdroid/repo/index-v1.json
+          mkdir -p _site/fdroid
+          cp -a fdroid/repo _site/fdroid/repo
+          ls -la _site/fdroid/repo
+
+      - name: Warn when the F-Droid repo step failed
+        if: ${{ steps.fdroid.outcome == 'failure' }}
+        run: echo "::warning::F-Droid repo generation failed — the site deployed without it (see the step log above)."
+
+      - name: Upload the dry-run artifact
+        if: ${{ inputs.dry_run }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: site-dry-run
+          path: _site/
+          retention-days: 7
+
+      - name: Configure Pages
+        if: ${{ !inputs.dry_run }}
+        uses: actions/configure-pages@v6
+
+      - name: Upload the Pages artifact
+        if: ${{ !inputs.dry_run }}
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site/
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        if: ${{ !inputs.dry_run }}
+        uses: actions/deploy-pages@v5

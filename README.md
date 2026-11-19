@@ -119,7 +119,7 @@ node tools/fdroid-lint.mjs
 - Numbers are normalized to [E.164](https://www.itu.int/rec/T-REC-E.164) before link construction; see [CONTEXT.md](CONTEXT.md) for the domain vocabulary
 - **Android shell** (`expo-app/`) is a minimal React Native WebView container built with EAS — it contributes no UI of its own, only a floating contact-picker button and history-driven launcher shortcuts
 - **Desktop shell** (`desktop/`) is a Tauri v2 window with a `Ctrl+Shift+C` global hotkey; build it with the Rust toolchain (see `desktop/README.md`)
-- **Distribution** — GitHub Pages (web), GitHub Releases (APK), F-Droid metadata for a self-hosted repo or an fdroiddata merge request
+- **Distribution** — GitHub Pages (web), GitHub Releases (APK), a self-hosted signed F-Droid repo at `.../fdroid/repo` (see [`docs/FDROID-REPO.md`](docs/FDROID-REPO.md)), and fdroiddata metadata for an official F-Droid merge request
 
 ## Acknowledgments
 

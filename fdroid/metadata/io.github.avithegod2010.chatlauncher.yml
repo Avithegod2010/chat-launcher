@@ -31,7 +31,7 @@ Description: |-
 RepoType: git
 Repo: https://github.com/Avithegod2010/chat-launcher.git
 
-Binaries: https://github.com/Avithegod2010/chat-launcher/releases/download/v1.0.0/app-release.apk
+Binaries: https://github.com/Avithegod2010/chat-launcher/releases/download/v2.0.2/app-release.apk
 
 Builds:
   - versionName: 2.0.2
