@@ -39,6 +39,13 @@ If the F-Droid step fails, the run shows a warning and the **site still
 deploys** — the repo URL then serves the previous index until the next green
 run.
 
+Build the artifact without deploying (useful after touching the workflow):
+
+```bash
+gh workflow run pages.yml --ref main -f dry_run=true
+# then download the "site-dry-run" artifact and inspect /fdroid/repo/
+```
+
 ## Secrets
 
 | Secret | What |

@@ -74,6 +74,7 @@ Every messenger hides chat-by-number behind the same dance: save the contact, re
 - **Android (Chrome/Edge):** open the site → menu ⋮ → *Add to Home screen* / *Install app*
 - **iOS (Safari):** Share → *Add to Home Screen*
 - **Desktop (Chrome/Edge):** install icon in the address bar, or the in-app *Install* button
+- **Windows desktop shell:** portable exe and NSIS installer attached to the [`desktop-v*` releases](../../releases) (Tauri, ~2 MB; global hotkey + clipboard watcher)
 - **Android APK:** a small Expo shell around this site is built on [Expo EAS](https://expo.dev) and attached to [Releases](../../releases) — it loads the live app, keeps everything up to date, and hands deep links (`wa.me`, `tel:`, …) to the operating system
 
 ## Run locally
