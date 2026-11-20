@@ -33,6 +33,8 @@ should read this first so discussions use the same words.
 | **Home widget** | The Android 4×2 AppWidget (`react-native-android-widget`): mirrors the top 3 history entries; taps deep-link into the site. Data flows page → shell → AsyncStorage → headless widget task handler. |
 | **QS tile** | The Quick Settings tile service (`LauncherTileService.kt`, injected by `expo-app/plugins/tile-plugin.js`): one tap opens Chat Launcher. |
 | **Clipboard watcher** | Desktop-only (`desktop/src-tauri`): polls the clipboard; a fresh 8–15-digit "number only" text summons the window pre-filled. |
+| **Auto-sync** | One background two-way sync pass per launch (pull → merge → push) when a WebDAV target is configured; never overwrites local theme settings. Toggle in Settings, off switch persists in `chatlauncher:sync`. |
+| **Update feed** | The `desktop-latest` GitHub release holding `latest.json` + the signed `chat-launcher-setup.exe`; the Tauri updater verifies the minisign signature against `tauri.conf.json`'s `pubkey`. |
 | **Motion tokens** | CSS custom properties (`--m-fast/med/slow`, `--ease-out/spring`) that every animation derives from — retune (or flatten under `prefers-reduced-motion`) in one place. |
 
 ## Product rules of thumb
