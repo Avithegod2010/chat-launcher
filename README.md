@@ -1,23 +1,34 @@
-# 💬 Chat Launcher
+<div align="center">
 
-**Type a phone number → tap an app → start chatting.**
+<h1>Chat Launcher</h1>
 
-Chat Launcher opens a number's chat directly in WhatsApp, Telegram, Signal, SMS, Viber, Skype and more — no contacts app, no copy-pasting, no saving the number first. It's a zero-dependency, offline-first PWA: nothing is tracked, nothing leaves your device, and it installs as a real app on Android, iOS and desktop.
+<p><strong>Enter a phone number, choose a messenger and start chatting.</strong></p>
 
-**[Open Chat Launcher](https://avithegod2010.github.io/chat-launcher/)**
+<p><strong><a href="https://avithegod2010.github.io/chat-launcher/">💬 Open Chat Launcher</a></strong> · <a href="#install">⬇️ Install on Android or Windows</a> · <a href="#privacy">🔒 Privacy</a></p>
+
+<picture>
+  <source media="(prefers-reduced-motion: reduce)" srcset="readme-hero.png" />
+  <img src="readme-hero.gif" width="820" alt="An illustrated phone number field branching to three messaging options" />
+</picture>
+
+</div>
+
+## 💬 Phone and desktop
 
 <p align="center">
-  <img src="screenshots/mobile-dark.png" alt="Chat Launcher on mobile" width="300">
+  <a href="screenshots/mobile-dark.png"><img src="screenshots/mobile-dark.png" width="27%" alt="Chat Launcher on a phone showing the number field and messaging options" /></a>
+  <a href="screenshots/desktop-dark.png"><img src="screenshots/desktop-dark.png" width="65%" alt="Chat Launcher with its desktop dark theme" /></a>
 </p>
-<p align="center">
-  <img src="screenshots/desktop-dark.png" alt="Chat Launcher on desktop (dark theme)" width="720">
-</p>
+
+<p align="center"><sub>Enter a number → choose a messenger → open the conversation</sub></p>
 
 ## Why
 
-Every messenger hides chat-by-number behind the same dance: save the contact, reopen the app, find them, chat — for a one-time conversation with a plumber or a marketplace seller. Chat Launcher collapses that to *number in, chat open*. It also shines when you already have a number in front of you (a listing, a support page, a message): paste `+91 98765 43210` and the country is detected automatically.
+Paste or type a number and Chat Launcher detects the country from its dial code. Open WhatsApp, Telegram, Signal, SMS or another supported app without adding the number to your contacts.
 
-## Features
+<a name="features"></a>
+
+## ✨ Features
 
 - 🚀 **9 launch targets** — WhatsApp, Telegram, Signal, SMS, Phone call, Viber, Skype, LINE, Threema
 - 🌍 **Country picker** with ~230 dial codes and emoji flags; your choice is remembered
@@ -63,7 +74,9 @@ Every messenger hides chat-by-number behind the same dance: save the contact, re
 
 *App only* = the platform exposes no open-chat-by-phone-number URL, so the tile opens the app itself. This is a platform limitation, not a bug — it's labeled honestly in the UI too.
 
-## Privacy
+<a name="privacy"></a>
+
+## 🔒 Privacy
 
 - **No network requests after load** — until *you* configure sync. The CSP allows outbound requests only to https endpoints, and the app itself fetches nothing.
 - **No accounts, no analytics, no tracking.**
@@ -71,7 +84,9 @@ Every messenger hides chat-by-number behind the same dance: save the contact, re
 - **Sync is zero-knowledge**: your passphrase derives the AES-GCM key on-device (PBKDF2, 310k iterations); the WebDAV server only ever stores ciphertext. WebDAV credentials are stored locally in `localStorage` — use an app password.
 - Referrer is stripped (`no-referrer`) so chat targets don't learn you came from Chat Launcher.
 
-## Install
+<a name="install"></a>
+
+## ⬇️ Install
 
 | Platform | Download |
 | --- | --- |
@@ -86,7 +101,9 @@ Every messenger hides chat-by-number behind the same dance: save the contact, re
 - **Windows desktop shell:** portable exe and NSIS installer attached to the [`desktop-v*` releases](../../releases) (Tauri, ~2 MB; global hotkey + clipboard watcher)
 - **Android APK:** a small Expo shell around this site is built on [Expo EAS](https://expo.dev) and attached to [Releases](../../releases) — it loads the live app, keeps everything up to date, and hands deep links (`wa.me`, `tel:`, …) to the operating system
 
-## Run locally
+<a name="run-locally"></a>
+
+## 🛠️ Run locally
 
 ```bash
 node tools/serve.mjs        # → http://127.0.0.1:8143
