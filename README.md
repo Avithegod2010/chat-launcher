@@ -4,11 +4,13 @@
 
 Chat Launcher opens a number's chat directly in WhatsApp, Telegram, Signal, SMS, Viber, Skype and more — no contacts app, no copy-pasting, no saving the number first. It's a zero-dependency, offline-first PWA: nothing is tracked, nothing leaves your device, and it installs as a real app on Android, iOS and desktop.
 
-<p align="center">
-  <img src="screenshots/desktop-dark.png" alt="Chat Launcher on desktop (dark theme)" width="720">
-</p>
+**[Open Chat Launcher](https://avithegod2010.github.io/chat-launcher/)**
+
 <p align="center">
   <img src="screenshots/mobile-dark.png" alt="Chat Launcher on mobile" width="300">
+</p>
+<p align="center">
+  <img src="screenshots/desktop-dark.png" alt="Chat Launcher on desktop (dark theme)" width="720">
 </p>
 
 ## Why
@@ -69,7 +71,14 @@ Every messenger hides chat-by-number behind the same dance: save the contact, re
 - **Sync is zero-knowledge**: your passphrase derives the AES-GCM key on-device (PBKDF2, 310k iterations); the WebDAV server only ever stores ciphertext. WebDAV credentials are stored locally in `localStorage` — use an app password.
 - Referrer is stripped (`no-referrer`) so chat targets don't learn you came from Chat Launcher.
 
-## Install as an app
+## Install
+
+| Platform | Download |
+| --- | --- |
+| Android | [APK v2.0.2](https://github.com/Avithegod2010/chat-launcher/releases/download/v2.0.2/app-release.apk) |
+| Windows | [Installer v2.1.0](https://github.com/Avithegod2010/chat-launcher/releases/download/desktop-v2.1.0/chat-launcher-setup.exe) · [Portable EXE](https://github.com/Avithegod2010/chat-launcher/releases/download/desktop-v2.1.0/chat-launcher-desktop.exe) |
+
+### Install from your browser
 
 - **Android (Chrome/Edge):** open the site → menu ⋮ → *Add to Home screen* / *Install app*
 - **iOS (Safari):** Share → *Add to Home Screen*
