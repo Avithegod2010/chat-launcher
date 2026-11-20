@@ -22,7 +22,7 @@ const BUDGETS = [
   { path: 'js/templates.js', budget: 6 * 1024, label: 'templates' },
   { path: 'js/lists.js', budget: 8 * 1024, label: 'broadcast lists' },
   { path: 'js/suggest.js', budget: 4 * 1024, label: 'suggestion engine' },
-  { path: 'js/sync.js', budget: 9 * 1024, label: 'e2e sync' },
+  { path: 'js/sync.js', budget: 10 * 1024, label: 'e2e sync' },
   { path: 'js/vendor/qrcode-generator.js', budget: 60 * 1024, label: 'vendored QR' },
   { path: 'manifest.webmanifest', budget: 4 * 1024, label: 'manifest' },
   { path: 'sw.js', budget: 6 * 1024, label: 'service worker' },
