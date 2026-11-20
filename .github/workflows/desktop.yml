@@ -62,10 +62,12 @@ jobs:
           set -euo pipefail
           mkdir -p out
           cp desktop/src-tauri/target/release/chat-launcher-desktop.exe out/
-          cp desktop/src-tauri/target/release/bundle/nsis/*-setup.exe out/
-          # Tauri's Windows updater artifact is the NSIS setup exe itself plus
-          # its minisign signature (there is no .nsis.zip on Windows).
-          cp desktop/src-tauri/target/release/bundle/nsis/*-setup.exe.sig out/
+          # Deterministic, space-free names: GitHub rewrites spaces in release
+          # asset names, which would break the URL the updater downloads.
+          # The signature covers the file bytes, so renaming is safe.
+          SETUP=$(ls desktop/src-tauri/target/release/bundle/nsis/*-setup.exe)
+          cp "$SETUP" out/chat-launcher-setup.exe
+          cp "$SETUP.sig" out/chat-launcher-setup.exe.sig
           cd out
           sha256sum ./*.exe > SHA256SUMS.txt
           ls -la
@@ -78,9 +80,8 @@ jobs:
         run: |
           set -euo pipefail
           VERSION=$(node -p "require('./desktop/src-tauri/tauri.conf.json').version")
-          SETUP=$(basename "$(ls out/*-setup.exe)")
-          ENCODED=$(node -e "console.log(encodeURIComponent(process.argv[1]))" "$SETUP")
-          URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/desktop-latest/${ENCODED}"
+          SETUP=chat-launcher-setup.exe
+          URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/desktop-latest/${SETUP}"
           node -e '
             const fs = require("fs");
             const [version, sigPath, url, out] = process.argv.slice(1);
@@ -135,5 +136,6 @@ jobs:
           gh release view "$TAG" >/dev/null 2>&1 || \
             gh release create "$TAG" \
               --title "Chat Launcher Desktop — latest" \
-              --notes "Rolling feed used by the desktop app's built-in updater. Versioned installers are attached to each desktop-v* release."
+              --prerelease \
+              --notes "Rolling feed used by the desktop app's built-in updater. Versioned installers are attached to each desktop-v* release. This is not a release announcement."
           gh release upload "$TAG" out/*.exe out/*-setup.exe.sig out/latest.json --clobber
