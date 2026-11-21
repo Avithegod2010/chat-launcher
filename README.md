@@ -6,19 +6,24 @@
 
 <p><strong><a href="https://avithegod2010.github.io/chat-launcher/">💬 Open Chat Launcher</a></strong> · <a href="#install">⬇️ Install on Android or Windows</a> · <a href="#privacy">🔒 Privacy</a></p>
 
-<picture>
-  <source media="(prefers-reduced-motion: reduce)" srcset="readme-hero.png" />
-  <img src="readme-hero.gif" width="820" alt="An illustrated phone number field branching to three messaging options" />
-</picture>
-
 </div>
 
 ## 💬 Phone and desktop
 
 <p align="center">
-  <a href="screenshots/mobile-dark.png"><img src="screenshots/mobile-dark.png" width="27%" alt="Chat Launcher on a phone showing the number field and messaging options" /></a>
-  <a href="screenshots/desktop-dark.png"><img src="screenshots/desktop-dark.png" width="65%" alt="Chat Launcher with its desktop dark theme" /></a>
+  <a href="screenshots/mobile-dark.png"><img src="screenshots/mobile-dark.png" width="35%" alt="Chat Launcher on a phone showing the number field and messaging options" /></a>
+  <a href="screenshots/desktop-dark.png"><img src="screenshots/desktop-dark.png" width="57%" alt="Chat Launcher with its desktop dark theme" /></a>
 </p>
+
+<details>
+<summary>Project illustration</summary>
+
+<picture>
+  <source media="(prefers-reduced-motion: reduce)" srcset="readme-hero.png" />
+  <img src="readme-hero.gif" width="820" alt="An illustrated phone number field branching to three messaging options" />
+</picture>
+
+</details>
 
 <p align="center"><sub>Enter a number → choose a messenger → open the conversation</sub></p>
 
