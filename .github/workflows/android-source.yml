@@ -33,7 +33,7 @@ jobs:
           cache: npm
           cache-dependency-path: expo-app/package-lock.json
 
-      - uses: actions/setup-java@v5
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: 17
