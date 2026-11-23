@@ -73,10 +73,6 @@ export default function App() {
   const [query, setQuery] = useState('');
   const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntent();
 
-  const pushNumber = useCallback((number) => {
-    webRef.current?.injectJavaScript(shellMessage({ type: 'chatlauncher-contact', number }));
-  }, []);
-
   /** Quick actions land here — reload the app URL with the number params. */
   const openFromAction = useCallback((action) => {
     const number = action?.params?.number;
