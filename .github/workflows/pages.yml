@@ -47,9 +47,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          # Release events check out the tag; keep deploying the site from
-          # main in that case. Branch/PR dispatches test their own tree.
-          ref: ${{ github.event_name == 'release' && 'main' || github.ref }}
+          # Always build the published site from main. A workflow_dispatch can be
+          # started from any branch, and deploying that tree means anyone with
+          # write access can publish unreviewed code to the origin every installed
+          # shell loads at runtime. Dry runs still test their own tree.
+          ref: ${{ inputs.dry_run && github.ref || 'main' }}
 
       - uses: actions/setup-node@v7
         with:
