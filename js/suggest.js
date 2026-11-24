@@ -23,7 +23,6 @@ export function suggestApp(entry, stats, hour = new Date().getHours()) {
   const hourKey = String(((Number(hour) || 0) % 24 + 24) % 24);
 
   const globalMax = Math.max(1, ...Object.values(byApp).map(Number));
-  const hourMax = Math.max(1, ...Object.values(byHour).map(Number));
 
   let best = null;
   let bestScore = 0;
